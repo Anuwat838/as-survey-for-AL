@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>AS Survey System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-soft: #6b7280;
+    --primary: #1e40af;
+    --primary-hover: #1e3a8a;
+    --success: #059669;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --pending: #f59e0b;
+    --shadow: 0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: 'Geist', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .app { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 4px; margin-bottom: 16px;
+  }
+  .header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  .header .meta { color: var(--text-soft); font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; box-shadow: var(--shadow);
+    margin-bottom: 12px;
+  }
+  .card h2 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
+  .card h3 { margin: 16px 0 8px; font-size: 14px; font-weight: 600; color: var(--text-soft); }
+  label {
+    display: block; margin-bottom: 6px;
+    font-size: 13px; font-weight: 500; color: var(--text-soft);
+  }
+  input[type="text"], input[type="password"], input[type="number"],
+  input[type="date"], input[type="datetime-local"], textarea, select {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    font: inherit; background: #fff; color: var(--text);
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+  }
+  textarea { min-height: 80px; resize: vertical; font-family: inherit; }
+  .form-row { margin-bottom: 14px; }
+  .form-row.inline { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 10px 16px;
+    background: var(--primary); color: #fff;
+    border: none; border-radius: 8px;
+    font: inherit; font-weight: 500;
+    cursor: pointer; text-decoration: none;
+  }
+  .btn:hover { background: var(--primary-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 6px 12px; font-size: 13px; }
+  .btn-block { display: flex; width: 100%; }
+  .btn-secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #f9fafb; }
+  .btn-danger { background: var(--danger); }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-success { background: var(--success); }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+  }
+  .badge-pending { background: #fef3c7; color: #92400e; }
+  .badge-submitted { background: #d1fae5; color: #065f46; }
+  .badge-draft { background: #e5e7eb; color: #374151; }
+  .alert {
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;
+    font-size: 14px;
+  }
+  .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+  .alert-info { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .task-list .task {
+    padding: 14px; border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 8px; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .task-list .task:hover { border-color: var(--primary); }
+  .task-list .task .top { display: flex; justify-content: space-between; align-items: center; }
+  .task-list .task .branch { font-weight: 500; }
+  .task-list .task .survey { font-size: 13px; color: var(--text-soft); margin-top: 4px; }
+  .question-card {
+    padding: 14px; border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 10px;
+  }
+  .question-card .qhead { display: flex; gap: 8px; margin-bottom: 8px; }
+  .question-card .qnum {
+    background: var(--primary); color: #fff;
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; flex-shrink: 0;
+  }
+  .question-card .qtext { font-weight: 500; flex: 1; }
+  .question-card .qmeta { font-size: 12px; color: var(--text-soft); margin-bottom: 8px; }
+  .required { color: var(--danger); }
+  .photo-uploader {
+    border: 1px dashed var(--border); border-radius: 8px;
+    padding: 12px; margin-top: 8px; text-align: center;
+  }
+  .photo-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .photo-thumb {
+    position: relative; width: 80px; height: 80px;
+    border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-thumb .remove {
+    position: absolute; top: 2px; right: 2px;
+    background: rgba(0,0,0,0.6); color: #fff;
+    border: none; border-radius: 50%;
+    width: 18px; height: 18px; font-size: 11px;
+    cursor: pointer;
+  }
+  .nav-tabs {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    overflow-x: auto; padding-bottom: 4px;
+  }
+  .nav-tab {
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-soft); font: inherit; white-space: nowrap;
+  }
+  .nav-tab.active {
+    background: var(--card); border-color: var(--border);
+    color: var(--text); font-weight: 500;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table th, table td {
+    padding: 8px 10px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  table th { font-weight: 500; color: var(--text-soft); font-size: 12px; }
+  .progress-bar {
+    height: 8px; background: #e5e7eb; border-radius: 4px;
+    overflow: hidden; margin: 8px 0;
+  }
+  .progress-bar .fill { height: 100%; background: var(--success); transition: width 0.3s; }
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; text-align: center;
+  }
+  .stat .num { font-size: 22px; font-weight: 600; }
+  .stat .label { font-size: 12px; color: var(--text-soft); }
+  .branch-picker {
+    max-height: 300px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  }
+  .branch-picker label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px; margin: 0; cursor: pointer; font-weight: 400;
+    color: var(--text);
+  }
+  .branch-picker label:hover { background: #f9fafb; border-radius: 4px; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filter-row select, .filter-row input { flex: 1; min-width: 120px; }
+  .loading {
+    text-align: center; padding: 40px 20px; color: var(--text-soft);
+  }
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--border); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    vertical-align: middle; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .text-center { text-align: center; }
+  .mb-12 { margin-bottom: 12px; }
+  .mt-12 { margin-top: 12px; }
+  .gap-8 { display: flex; gap: 8px; flex-wrap: wrap; }
+  .empty { text-align: center; padding: 30px; color: var(--text-soft); }
+  @media (max-width: 600px) {
+    .app { padding: 12px; }
+    .stat-grid { grid-template-columns: repeat(3, 1fr); }
+    .stat .num { font-size: 18px; }
+    table { font-size: 13px; }
+    table th, table td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+
+const DEFAULT_API_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
+
+function getApiUrl() {
+  return localStorage.getItem('api_url') || DEFAULT_API_URL;
+}
+
+// ============================================================
+// API CLIENT (GET + encodeURIComponent pattern, retry on quota)
+// ============================================================
+
+async function api(action, params = {}, opts = {}) {
+  if (demoMode) {
+    await new Promise(r => setTimeout(r, 250)); // feel like a real network call
+    return mockApi(action, params);
+  }
+  
+  const url = getApiUrl();
+  const payload = {action, ...params};
+  
+  const usePost = opts.usePost || JSON.stringify(payload).length > 1500;
+  
+  const maxRetries = opts.maxRetries ?? 3;
+  let lastErr;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      let res;
+      if (usePost) {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {'Content-Type': 'text/plain;charset=utf-8'},
+          body: JSON.stringify(payload),
+          redirect: 'follow'
+        });
+      } else {
+        const qs = Object.entries(payload)
+          .map(([k, v]) => k + '=' + encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v))
+          .join('&');
+        res = await fetch(url + '?' + qs, {redirect: 'follow'});
+      }
+      const data = await res.json();
+      return data;
+    } catch (err) {
+      lastErr = err;
+      // Backoff with jitter for quota errors
+      const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
+// ============================================================
+// DEMO MODE — try the app with fake data, no backend needed
+// ============================================================
+
+let demoMode = false;
+
+function makeSeedDB() {
+  return {
+    users: [
+      {login_code: 'ADM01', name: 'Admin (Demo)', role: 'super_admin', status: 'active'},
+      {login_code: 'AS01', name: 'สมชาย ใจดี', role: 'as', status: 'active'}
+    ],
+    branches: [
+      {branch_code: 'BKK001', branch_name: 'Big C ลาดพร้าว', account: 'Big C', region: 'Central', province: 'กรุงเทพ', assigned_as_code: 'AS01', status: 'active'},
+      {branch_code: 'BKK002', branch_name: 'Lotus ปิ่นเกล้า', account: 'Lotus', region: 'Central', province: 'กรุงเทพ', assigned_as_code: 'AS01', status: 'active'},
+      {branch_code: 'CNX001', branch_name: 'Big C เซ็นทรัลเชียงใหม่', account: 'Big C', region: 'North', province: 'เชียงใหม่', assigned_as_code: 'AS01', status: 'active'},
+      {branch_code: 'KKN001', branch_name: 'Lotus ขอนแก่น', account: 'Lotus', region: 'Northeast', province: 'ขอนแก่น', assigned_as_code: 'AS01', status: 'active'}
+    ],
+    surveys: [{
+      survey_id: 'S_DEMO1',
+      title: 'สำรวจราคาคู่แข่ง (ตัวอย่าง)',
+      description: 'นี่คือ survey ตัวอย่างสำหรับลองใช้งาน ไม่ใช่ข้อมูลจริง',
+      questions_json: JSON.stringify([
+        {id: 'q1', text: 'ราคาตู้เย็น Samsung 2 ประตู (บาท)', type: 'number', required: true, allow_photo: false, photo_required: false},
+        {id: 'q2', text: 'แบรนด์คู่แข่งที่จัดวางใกล้ที่สุด', type: 'single_choice', required: true, allow_photo: false, photo_required: false, options: ['LG', 'Hisense', 'Toshiba', 'ไม่มี']},
+        {id: 'q3', text: 'การจัดวางสินค้าเป็นไปตาม planogram หรือไม่', type: 'single_choice', required: true, allow_photo: true, photo_required: true, options: ['ตรงตาม planogram', 'ไม่ตรง']},
+        {id: 'q4', text: 'หมายเหตุเพิ่มเติม', type: 'long_text', required: false, allow_photo: false, photo_required: false}
+      ]),
+      selected_branches_json: JSON.stringify(['BKK001', 'BKK002', 'CNX001', 'KKN001']),
+      deadline: new Date(Date.now() + 3*24*3600*1000).toISOString().slice(0,10),
+      status: 'published',
+      created_at: new Date().toISOString()
+    }],
+    responses: [{
+      response_id: 'R_DEMO1',
+      survey_id: 'S_DEMO1',
+      branch_code: 'BKK002',
+      as_code: 'AS01',
+      answers_json: JSON.stringify({
+        q1: {value: '24990', photos: []},
+        q2: {value: 'LG', photos: []},
+        q3: {value: 'ตรงตาม planogram', photos: ['https://placehold.co/200x200?text=Demo+Photo']},
+        q4: {value: 'สินค้าครบ ป้ายราคาชัดเจน', photos: []}
+      }),
+      submitted_at: new Date(Date.now() - 2*3600*1000).toISOString()
+    }]
+  };
+}
+
+let mockDB = makeSeedDB();
+
+function mockGenId(prefix) {
+  return prefix + '_' + Date.now().toString(36) + Math.floor(Math.random()*9999);
+}
+
+function mockApi(action, p) {
+  const ok = (extra) => ({ok: true, ...extra});
+  const fail = (error) => ({ok: false, error});
+  
+  switch (action) {
+    case 'ping':
+      return ok({time: new Date().toISOString() + ' (demo)'});
+    
+    case 'as_login': {
+      const u = mockDB.users.find(u => u.login_code === p.login_code && u.role === 'as');
+      if (!u) return fail('ไม่พบ AS Code นี้ (โหมด Demo ใช้ AS01)');
+      return ok({token: 'demo-token-as', user: {login_code: u.login_code, name: u.name, role: 'as'}});
+    }
+    case 'admin_login': {
+      const u = mockDB.users.find(u => u.login_code === p.login_code && u.role === 'super_admin');
+      if (!u) return fail('ไม่พบ Admin Code นี้ (โหมด Demo ใช้ ADM01)');
+      return ok({token: 'demo-token-admin', user: {login_code: u.login_code, name: u.name, role: 'super_admin'}});
+    }
+    
+    case 'get_tasks': {
+      const myBranches = mockDB.branches.filter(b => b.assigned_as_code === 'AS01' && b.status === 'active');
+      const myCodes = myBranches.map(b => b.branch_code);
+      const tasks = [];
+      mockDB.surveys.filter(s => s.status === 'published').forEach(s => {
+        const sel = JSON.parse(s.selected_branches_json);
+        myCodes.forEach(bc => {
+          if (sel.indexOf(bc) === -1) return;
+          const branch = myBranches.find(b => b.branch_code === bc);
+          const submitted = mockDB.responses.some(r => r.survey_id === s.survey_id && r.branch_code === bc);
+          tasks.push({
+            survey_id: s.survey_id, survey_title: s.title, survey_description: s.description,
+            deadline: s.deadline, branch_code: bc, branch_name: branch.branch_name,
+            account: branch.account, status: submitted ? 'submitted' : 'pending'
+          });
+        });
+      });
+      tasks.sort((a,b) => a.status !== b.status ? (a.status === 'pending' ? -1 : 1) : 0);
+      return ok({tasks});
+    }
+    
+    case 'get_survey': {
+      const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
+      if (!s) return fail('ไม่พบ survey นี้');
+      const branch = mockDB.branches.find(b => b.branch_code === p.branch_code);
+      const existing = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === p.branch_code);
+      return ok({
+        survey: {survey_id: s.survey_id, title: s.title, description: s.description, questions: JSON.parse(s.questions_json), deadline: s.deadline},
+        branch: {branch_code: branch.branch_code, branch_name: branch.branch_name, account: branch.account, region: branch.region},
+        existing_answers: existing ? JSON.parse(existing.answers_json) : null,
+        already_submitted: !!existing
+      });
+    }
+    
+    case 'submit_response': {
+      const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
+      if (!s) return fail('ไม่พบ survey นี้');
+      const questions = JSON.parse(s.questions_json);
+      const answers = typeof p.answers === 'string' ? JSON.parse(p.answers) : p.answers;
+      for (const q of questions) {
+        const a = answers[q.id];
+        if (q.required && (!a || a.value === '' || a.value == null)) return fail('กรุณาตอบคำถาม: ' + q.text);
+        if (q.type === 'number' && a && a.value !== '' && isNaN(Number(a.value))) return fail('คำตอบต้องเป็นตัวเลข: ' + q.text);
+        if (q.photo_required && (!a || !a.photos || a.photos.length === 0)) return fail('กรุณาแนบรูปสำหรับ: ' + q.text);
+      }
+      mockDB.responses = mockDB.responses.filter(r => !(r.survey_id === p.survey_id && r.branch_code === p.branch_code));
+      mockDB.responses.push({response_id: mockGenId('R'), survey_id: p.survey_id, branch_code: p.branch_code, as_code: 'AS01', answers_json: JSON.stringify(answers), submitted_at: new Date().toISOString()});
+      return ok({message: 'ส่งคำตอบสำเร็จ (demo)'});
+    }
+    
+    case 'upload_photo': {
+      // In demo mode, just echo back the uploaded image itself as the "url"
+      return ok({file_url: p.data_base64, file_id: mockGenId('F')});
+    }
+    
+    case 'admin_get_branches':
+      return ok({branches: mockDB.branches.filter(b => b.status === 'active')});
+    
+    case 'admin_get_users':
+      return ok({users: mockDB.users});
+    
+    case 'admin_create_user': {
+      const code = String(p.login_code||'').toUpperCase().trim();
+      const name = String(p.name||'').trim();
+      const role = String(p.role||'as').trim();
+      const pin = String(p.pin||'').trim();
+      if (!code || !name) return fail('กรุณากรอก Code และชื่อ');
+      if (pin.length < 6 || !/^\d+$/.test(pin)) return fail('PIN ต้องเป็นตัวเลขอย่างน้อย 6 หลัก');
+      if (mockDB.users.some(u => u.login_code === code)) return fail('Code "'+code+'" มีอยู่แล้ว (demo)');
+      mockDB.users.push({login_code: code, name, role, phone: String(p.phone||''), status: 'active'});
+      return ok({message: 'เพิ่ม user "'+code+'" สำเร็จ (demo)'});
+    }
+    
+    case 'admin_bulk_create_users': {
+      const text = String(p.rows_text||'').trim();
+      const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+      const created = [], skipped = [];
+      const existingCodes = new Set(mockDB.users.map(u=>u.login_code));
+      lines.forEach((line, idx) => {
+        const parts = line.split(/\t|,/).map(s=>s.trim());
+        const code = (parts[0]||'').toUpperCase();
+        const name = parts[1]||'';
+        const phone = parts[2]||'';
+        const customPin = parts[3]||'';
+        const role = (parts[4]||'as').toLowerCase();
+        if (!code || !name) { skipped.push({line: idx+1, raw: line, reason: 'ขาด Code หรือชื่อ'}); return; }
+        if (customPin && (customPin.length < 6 || !/^\d+$/.test(customPin))) { skipped.push({line: idx+1, raw: line, reason: 'PIN ที่ระบุไม่ถูกต้อง ต้องเป็นเลขอย่างน้อย 6 หลัก'}); return; }
+        if (existingCodes.has(code)) { skipped.push({line: idx+1, raw: line, reason: 'Code ซ้ำ (demo)'}); return; }
+        existingCodes.add(code);
+        const pin = customPin || String(Math.floor(100000 + Math.random()*900000));
+        mockDB.users.push({login_code: code, name, role, phone, status: 'active'});
+        created.push({login_code: code, name, phone, role, pin});
+      });
+      return ok({created, skipped});
+    }
+    
+    case 'admin_set_user_status': {
+      const u = mockDB.users.find(u => u.login_code === p.login_code);
+      if (!u) return fail('ไม่พบ user code นี้ (demo)');
+      u.status = p.status;
+      return ok({message: 'อัปเดตสถานะ (demo) สำเร็จ'});
+    }
+    
+    case 'admin_create_survey': {
+      const questions = typeof p.questions === 'string' ? JSON.parse(p.questions) : p.questions;
+      const branches = typeof p.selected_branches === 'string' ? JSON.parse(p.selected_branches) : p.selected_branches;
+      if (!p.title) return fail('กรุณากรอกชื่อ survey');
+      if (!questions || questions.length === 0) return fail('กรุณาเพิ่มคำถามอย่างน้อย 1 ข้อ');
+      if (!branches || branches.length === 0) return fail('กรุณาเลือกสาขาอย่างน้อย 1 สาขา');
+      questions.forEach((q,i) => { if (!q.id) q.id = 'q'+(i+1); });
+      const id = mockGenId('S');
+      mockDB.surveys.push({survey_id: id, title: p.title, description: p.description||'', questions_json: JSON.stringify(questions), selected_branches_json: JSON.stringify(branches), deadline: p.deadline||'', status: 'published', created_at: new Date().toISOString()});
+      return ok({survey_id: id, message: 'สร้าง survey สำเร็จ (demo)'});
+    }
+    
+    case 'admin_list_surveys': {
+      const surveys = mockDB.surveys.map(s => ({
+        survey_id: s.survey_id, title: s.title, description: s.description, deadline: s.deadline,
+        status: s.status, created_at: s.created_at,
+        question_count: JSON.parse(s.questions_json).length,
+        branch_count: JSON.parse(s.selected_branches_json).length
+      })).sort((a,b) => b.created_at.localeCompare(a.created_at));
+      return ok({surveys});
+    }
+    
+    case 'admin_get_progress': {
+      const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
+      if (!s) return fail('ไม่พบ survey นี้');
+      const sel = JSON.parse(s.selected_branches_json);
+      const rows = sel.map(bc => {
+        const branch = mockDB.branches.find(b => b.branch_code === bc) || {};
+        const resp = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === bc);
+        return {branch_code: bc, branch_name: branch.branch_name||bc, account: branch.account||'', region: branch.region||'', as_code: branch.assigned_as_code||'', status: resp?'submitted':'pending', submitted_at: resp?resp.submitted_at:''};
+      });
+      rows.sort((a,b) => a.status !== b.status ? (a.status==='pending'?-1:1) : (a.account.localeCompare(b.account) || a.region.localeCompare(b.region) || a.as_code.localeCompare(b.as_code) || a.branch_code.localeCompare(b.branch_code)));
+      const summary = {total: rows.length, submitted: rows.filter(r=>r.status==='submitted').length, pending: rows.filter(r=>r.status==='pending').length};
+      summary.percent = summary.total ? Math.round(summary.submitted/summary.total*100) : 0;
+      return ok({survey: {survey_id: s.survey_id, title: s.title, deadline: s.deadline, status: s.status}, summary, rows});
+    }
+    
+    case 'admin_export': {
+      const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
+      if (!s) return fail('ไม่พบ survey นี้');
+      const questions = JSON.parse(s.questions_json);
+      const sel = JSON.parse(s.selected_branches_json);
+      const headers = ['Account','Region','AS Code','Branch Code','Branch Name','Status','Submitted At'];
+      questions.forEach(q => { headers.push(q.text); if (q.allow_photo) headers.push(q.text+' (รูป)'); });
+      const rows = sel.map(bc => {
+        const branch = mockDB.branches.find(b => b.branch_code === bc) || {};
+        const resp = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === bc);
+        const answers = resp ? JSON.parse(resp.answers_json) : {};
+        const row = [branch.account||'', branch.region||'', branch.assigned_as_code||'', bc, branch.branch_name||'', resp?'submitted':'pending', resp?resp.submitted_at:''];
+        questions.forEach(q => { const a = answers[q.id]||{}; row.push(a.value!==undefined?String(a.value):''); if (q.allow_photo) row.push((a.photos||[]).length+' รูป'); });
+        return row;
+      });
+      rows.sort((a,b) => a[5]!==b[5] ? (a[5]==='pending'?-1:1) : (String(a[0]).localeCompare(b[0])||String(a[1]).localeCompare(b[1])||String(a[2]).localeCompare(b[2])||String(a[3]).localeCompare(b[3])));
+      return ok({survey_title: s.title, headers, rows});
+    }
+    
+    case 'admin_delete_survey': {
+      if (p.confirm !== 'DELETE') return fail('ต้องส่ง confirm=DELETE');
+      const before = mockDB.responses.length;
+      mockDB.responses = mockDB.responses.filter(r => r.survey_id !== p.survey_id);
+      const beforeS = mockDB.surveys.length;
+      mockDB.surveys = mockDB.surveys.filter(s => s.survey_id !== p.survey_id);
+      return ok({message: 'ลบสำเร็จ (demo): ' + (before-mockDB.responses.length) + ' responses, ' + (beforeS-mockDB.surveys.length) + ' survey', photos_deleted: true});
+    }
+    
+    default:
+      return fail('Demo mode: action ไม่รองรับ: ' + action);
+  }
+}
+
+function enterDemo(role) {
+  demoMode = true;
+  mockDB = makeSeedDB();
+  const user = role === 'super_admin'
+    ? {login_code: 'ADM01', name: 'Admin (Demo)', role: 'super_admin'}
+    : {login_code: 'AS01', name: 'สมชาย ใจดี (Demo)', role: 'as'};
+  setState({token: 'demo-token', user, msg: null});
+  goHome();
+}
+
+function exitDemo() {
+  demoMode = false;
+  mockDB = makeSeedDB();
+  setState({token: null, user: null, screen: 'splash', data: {}});
+}
+
+// ============================================================
+// STATE
+// ============================================================
+
+const state = {
+  screen: 'splash',
+  token: localStorage.getItem('token') || null,
+  user: JSON.parse(localStorage.getItem('user') || 'null'),
+  loading: false,
+  msg: null,
+  data: {}
+};
+
+function setState(patch) {
+  Object.assign(state, patch);
+  render();
+}
+
+function setMsg(type, text, autoclear = 4000) {
+  setState({msg: {type, text}});
+  if (autoclear) setTimeout(() => { if (state.msg && state.msg.text === text) setState({msg: null}); }, autoclear);
+}
+
+function login(token, user) {
+  localStorage.setItem('token', token);
+  localStorage.setItem('user', JSON.stringify(user));
+  setState({token, user, msg: null});
+  goHome();
+}
+
+function logout() {
+  if (demoMode) { exitDemo(); return; }
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  setState({token: null, user: null, screen: 'splash', data: {}});
+}
+
+function goHome() {
+  if (!state.user) { setState({screen: 'splash'}); return; }
+  if (state.user.role === 'super_admin') setState({screen: 'admin_home'});
+  else setState({screen: 'as_home'});
+}
+
+// ============================================================
+// RENDER ENTRY
+// ============================================================
+
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  
+  // Header
+  if (state.user) {
+    const h = document.createElement('div');
+    h.className = 'header';
+    h.innerHTML = `
+      <h1>AS Survey ${state.user.role === 'super_admin' ? '(Admin)' : ''} ${demoMode ? '<span class="badge" style="background:#fde68a;color:#92400e;">🎭 DEMO</span>' : ''}</h1>
+      <div class="meta">${escapeHtml(state.user.name)} · <a href="#" id="logoutLink">${demoMode ? 'ออกจาก Demo' : 'ออก'}</a></div>
+    `;
+    app.appendChild(h);
+    h.querySelector('#logoutLink').onclick = (e) => { e.preventDefault(); if (demoMode || confirm('ออกจากระบบ?')) logout(); };
+  }
+  
+  // Message
+  if (state.msg) {
+    const a = document.createElement('div');
+    a.className = 'alert alert-' + state.msg.type;
+    a.textContent = state.msg.text;
+    app.appendChild(a);
+  }
+  
+  // Loading overlay
+  if (state.loading) {
+    const l = document.createElement('div');
+    l.className = 'loading';
+    l.innerHTML = '<div class="spinner"></div>กำลังโหลด...';
+    app.appendChild(l);
+    return;
+  }
+  
+  // Screens
+  const screens = {
+    splash: renderSplash,
+    as_login: renderAsLogin,
+    admin_login: renderAdminLogin,
+    as_home: renderAsHome,
+    as_survey: renderAsSurvey,
+    admin_home: renderAdminHome,
+    admin_create: renderAdminCreate,
+    admin_progress: renderAdminProgress,
+    admin_users: renderAdminUsers,
+    admin_settings: renderAdminSettings
+  };
+  const fn = screens[state.screen] || renderSplash;
+  fn(app);
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+// ============================================================
+// SPLASH / LOGIN SCREENS
+// ============================================================
+
+function renderSplash(app) {
+  const div = document.createElement('div');
+  div.className = 'card text-center';
+  div.innerHTML = `
+    <h2>AS Survey System</h2>
+    <p style="color: var(--text-soft); margin-bottom: 24px;">เลือกประเภทผู้ใช้งาน</p>
+    <div class="gap-8" style="justify-content: center;">
+      <button class="btn" id="asBtn">AS Login</button>
+      <button class="btn btn-secondary" id="adBtn">Admin Login</button>
+    </div>
+    <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);">
+      <p style="color: var(--text-soft); font-size: 13px; margin-bottom: 10px;">ยังไม่ได้ตั้งค่า backend? ลองดูหน้าตาก่อนได้ด้วยข้อมูลตัวอย่าง</p>
+      <div class="gap-8" style="justify-content: center;">
+        <button class="btn btn-secondary btn-sm" id="demoAsBtn">🎭 ลองแบบ AS (Demo)</button>
+        <button class="btn btn-secondary btn-sm" id="demoAdminBtn">🎭 ลองแบบ Admin (Demo)</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(div);
+  div.querySelector('#asBtn').onclick = () => setState({screen: 'as_login'});
+  div.querySelector('#adBtn').onclick = () => setState({screen: 'admin_login'});
+  div.querySelector('#demoAsBtn').onclick = () => enterDemo('as');
+  div.querySelector('#demoAdminBtn').onclick = () => enterDemo('super_admin');
+}
+
+function renderAsLogin(app) { renderLoginForm(app, 'AS Login', 'as_login', 'AS Code', 'as_login_action'); }
+function renderAdminLogin(app) { renderLoginForm(app, 'Admin Login', 'admin_login', 'Admin Code', 'admin_login_action'); }
+
+function renderLoginForm(app, title, fromScreen, codeLabel, action) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.innerHTML = `
+    <h2>${title}</h2>
+    <div class="form-row">
+      <label>${codeLabel}</label>
+      <input type="text" id="codeInput" autocomplete="username" autocapitalize="characters" />
+    </div>
+    <div class="form-row">
+      <label>PIN</label>
+      <input type="password" id="pinInput" autocomplete="current-password" inputmode="numeric" />
+    </div>
+    <button class="btn btn-block" id="loginBtn">เข้าสู่ระบบ</button>
+    <button class="btn btn-secondary btn-block mt-12" id="backBtn">ย้อนกลับ</button>
+  `;
+  app.appendChild(div);
+  div.querySelector('#backBtn').onclick = () => setState({screen: 'splash'});
+  div.querySelector('#loginBtn').onclick = async () => {
+    const code = div.querySelector('#codeInput').value.trim();
+    const pin = div.querySelector('#pinInput').value.trim();
+    if (!code || !pin) { setMsg('error', 'กรุณากรอกข้อมูลให้ครบ'); return; }
+    setState({loading: true});
+    try {
+      const apiAction = fromScreen === 'as_login' ? 'as_login' : 'admin_login';
+      const res = await api(apiAction, {login_code: code, pin: pin});
+      setState({loading: false});
+      if (res.ok) login(res.token, res.user);
+      else setMsg('error', res.error || 'Login ไม่สำเร็จ');
+    } catch (e) {
+      setState({loading: false});
+      setMsg('error', 'เชื่อมต่อ server ไม่ได้: ' + e.message);
+    }
+  };
+  // Enter to submit
+  div.querySelector('#pinInput').onkeydown = e => { if (e.key === 'Enter') div.querySelector('#loginBtn').click(); };
+}
+
+// ============================================================
+// AS HOME — Task List
+// ============================================================
+
+async function renderAsHome(app) {
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลดงาน...</div>';
+  
+  let res;
+  try { res = await api('get_tasks', {token: state.token}); }
+  catch (e) { div.innerHTML = `<div class="alert alert-error">โหลดไม่ได้: ${escapeHtml(e.message)}</div>`; return; }
+  
+  if (!res.ok) {
+    if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  
+  const pending = res.tasks.filter(t => t.status === 'pending');
+  const done = res.tasks.filter(t => t.status === 'submitted');
+  
+  div.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${res.tasks.length}</div><div class="label">ทั้งหมด</div></div>
+      <div class="stat"><div class="num" style="color: var(--pending);">${pending.length}</div><div class="label">ค้าง</div></div>
+      <div class="stat"><div class="num" style="color: var(--success);">${done.length}</div><div class="label">ส่งแล้ว</div></div>
+    </div>
+    
+    ${pending.length > 0 ? `
+      <div class="card">
+        <h2>งานค้าง (${pending.length})</h2>
+        <div class="task-list">
+          ${pending.map(taskHtml).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${done.length > 0 ? `
+      <div class="card">
+        <h2>ส่งแล้ว (${done.length})</h2>
+        <div class="task-list">
+          ${done.map(taskHtml).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${res.tasks.length === 0 ? `
+      <div class="card empty">ยังไม่มีงานสำหรับสาขาที่คุณดูแล</div>
+    ` : ''}
+  `;
+  
+  div.querySelectorAll('[data-survey-id]').forEach(el => {
+    el.onclick = () => openSurvey(el.dataset.surveyId, el.dataset.branchCode);
+  });
+}
+
+function taskHtml(t) {
+  return `
+    <div class="task" data-survey-id="${escapeHtml(t.survey_id)}" data-branch-code="${escapeHtml(t.branch_code)}">
+      <div class="top">
+        <div class="branch">${escapeHtml(t.branch_name)}</div>
+        <span class="badge badge-${t.status}">${t.status === 'pending' ? 'ค้าง' : 'ส่งแล้ว'}</span>
+      </div>
+      <div class="survey">${escapeHtml(t.survey_title)} · ${escapeHtml(t.account || '')}</div>
+    </div>
+  `;
+}
+
+async function openSurvey(surveyId, branchCode) {
+  setState({loading: true, data: {survey_id: surveyId, branch_code: branchCode}});
+  try {
+    const res = await api('get_survey', {token: state.token, survey_id: surveyId, branch_code: branchCode});
+    setState({loading: false});
+    if (!res.ok) { setMsg('error', res.error); return; }
+    setState({
+      screen: 'as_survey',
+      data: {
+        survey: res.survey,
+        branch: res.branch,
+        answers: res.existing_answers || {},
+        already_submitted: res.already_submitted
+      }
+    });
+  } catch (e) {
+    setState({loading: false});
+    setMsg('error', 'โหลดไม่ได้: ' + e.message);
+  }
+}
+
+// ============================================================
+// AS SURVEY FORM
+// ============================================================
+
+function renderAsSurvey(app) {
+  const {survey, branch, answers, already_submitted} = state.data;
+  if (!survey) { setState({screen: 'as_home'}); return; }
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = `
+    <div class="card">
+      <button class="btn btn-secondary btn-sm" id="backBtn">← กลับ</button>
+      <h2 style="margin-top: 12px;">${escapeHtml(survey.title)}</h2>
+      ${survey.description ? `<p style="color: var(--text-soft);">${escapeHtml(survey.description)}</p>` : ''}
+      <div style="font-size: 13px; color: var(--text-soft); margin-top: 8px;">
+        สาขา: <strong>${escapeHtml(branch.branch_name)}</strong> (${escapeHtml(branch.branch_code)})
+        ${already_submitted ? '<span class="badge badge-submitted" style="margin-left: 8px;">ส่งแล้ว — แก้ใหม่จะทับของเดิม</span>' : ''}
+      </div>
+    </div>
+    
+    <div id="questionsContainer"></div>
+    
+    <div class="card">
+      <button class="btn btn-success btn-block" id="submitBtn">${already_submitted ? 'ส่งใหม่ (ทับของเดิม)' : 'ส่งคำตอบ'}</button>
+    </div>
+  `;
+  
+  div.querySelector('#backBtn').onclick = () => setState({screen: 'as_home'});
+  
+  const qc = div.querySelector('#questionsContainer');
+  survey.questions.forEach((q, i) => qc.appendChild(renderQuestion(q, i, answers[q.id] || {})));
+  
+  div.querySelector('#submitBtn').onclick = submitSurvey;
+}
+
+function renderQuestion(q, index, currentAnswer) {
+  const card = document.createElement('div');
+  card.className = 'question-card';
+  card.dataset.qid = q.id;
+  
+  const typeLabel = {
+    short_text: 'ข้อความสั้น',
+    long_text: 'ข้อความยาว',
+    number: 'ตัวเลข',
+    single_choice: 'เลือก 1 ข้อ',
+    multiple_choice: 'เลือกได้หลายข้อ'
+  }[q.type] || q.type;
+  
+  let inputHtml = '';
+  const val = currentAnswer.value !== undefined ? currentAnswer.value : '';
+  
+  if (q.type === 'short_text') {
+    inputHtml = `<input type="text" class="qval" value="${escapeHtml(val)}" />`;
+  } else if (q.type === 'long_text') {
+    inputHtml = `<textarea class="qval">${escapeHtml(val)}</textarea>`;
+  } else if (q.type === 'number') {
+    inputHtml = `<input type="number" class="qval" value="${escapeHtml(val)}" />`;
+  } else if (q.type === 'single_choice') {
+    inputHtml = `<select class="qval"><option value="">-- เลือก --</option>` +
+      (q.options || []).map(o => `<option value="${escapeHtml(o)}" ${o === val ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('') +
+      `</select>`;
+  } else if (q.type === 'multiple_choice') {
+    const vals = Array.isArray(val) ? val : (val ? String(val).split(',') : []);
+    inputHtml = (q.options || []).map(o => `
+      <label style="display: block; padding: 4px 0; font-weight: 400;">
+        <input type="checkbox" class="qval-multi" value="${escapeHtml(o)}" ${vals.indexOf(o) !== -1 ? 'checked' : ''}/>
+        ${escapeHtml(o)}
+      </label>
+    `).join('');
+  }
+  
+  card.innerHTML = `
+    <div class="qhead">
+      <div class="qnum">${index + 1}</div>
+      <div class="qtext">${escapeHtml(q.text)} ${q.required ? '<span class="required">*</span>' : ''}</div>
+    </div>
+    <div class="qmeta">
+      ประเภท: ${typeLabel}
+      ${q.photo_required ? ' · <span class="required">ต้องแนบรูป</span>' : (q.allow_photo ? ' · แนบรูปได้' : '')}
+    </div>
+    ${inputHtml}
+    ${q.allow_photo ? `
+      <div class="photo-uploader">
+        <input type="file" accept="image/*" multiple class="photo-input" style="display: none;" />
+        <button type="button" class="btn btn-secondary btn-sm photo-btn">📷 เพิ่มรูป</button>
+        <div class="photo-list"></div>
+      </div>
+    ` : ''}
+  `;
+  
+  // Initialize photo list
+  card.photos = currentAnswer.photos ? [...currentAnswer.photos] : [];
+  if (q.allow_photo) refreshPhotoList(card);
+  
+  // Hook photo button
+  if (q.allow_photo) {
+    const btn = card.querySelector('.photo-btn');
+    const input = card.querySelector('.photo-input');
+    btn.onclick = () => input.click();
+    input.onchange = async () => {
+      for (const file of input.files) {
+        if (card.photos.length >= 5) { setMsg('error', 'สูงสุด 5 รูปต่อข้อ'); break; }
+        await uploadPhotoForQuestion(card, q.id, file);
+      }
+      input.value = '';
+      refreshPhotoList(card);
+    };
+  }
+  
+  return card;
+}
+
+function refreshPhotoList(card) {
+  const list = card.querySelector('.photo-list');
+  if (!list) return;
+  list.innerHTML = card.photos.map((url, i) => `
+    <div class="photo-thumb">
+      <img src="${escapeHtml(url)}" alt="" />
+      <button class="remove" data-i="${i}">×</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.remove').forEach(btn => {
+    btn.onclick = () => {
+      card.photos.splice(parseInt(btn.dataset.i), 1);
+      refreshPhotoList(card);
+    };
+  });
+}
+
+async function uploadPhotoForQuestion(card, questionId, file) {
+  if (file.size > 10 * 1024 * 1024) { setMsg('error', 'ไฟล์ใหญ่เกิน 10MB'); return; }
+  
+  // Show temp loading thumb
+  card.photos.push('uploading');
+  refreshPhotoList(card);
+  
+  const base64 = await fileToBase64(file);
+  try {
+    const res = await api('upload_photo', {
+      token: state.token,
+      survey_id: state.data.survey.survey_id,
+      branch_code: state.data.branch.branch_code,
+      question_id: questionId,
+      filename: file.name,
+      data_base64: base64
+    }, {usePost: true});
+    card.photos.pop(); // remove uploading placeholder
+    if (res.ok) card.photos.push(res.file_url);
+    else setMsg('error', res.error || 'อัปโหลดไม่สำเร็จ');
+  } catch (e) {
+    card.photos.pop();
+    setMsg('error', 'อัปโหลดไม่ได้: ' + e.message);
+  }
+  refreshPhotoList(card);
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitSurvey() {
+  const {survey} = state.data;
+  const answers = {};
+  
+  for (const card of document.querySelectorAll('.question-card')) {
+    const qid = card.dataset.qid;
+    const q = survey.questions.find(qq => qq.id === qid);
+    let value;
+    if (q.type === 'multiple_choice') {
+      value = [...card.querySelectorAll('.qval-multi:checked')].map(c => c.value);
+    } else {
+      const el = card.querySelector('.qval');
+      value = el ? el.value : '';
+    }
+    const photos = (card.photos || []).filter(p => p !== 'uploading');
+    answers[qid] = {value, photos};
+  }
+  
+  setState({loading: true});
+  try {
+    const res = await api('submit_response', {
+      token: state.token,
+      survey_id: state.data.survey.survey_id,
+      branch_code: state.data.branch.branch_code,
+      answers: answers
+    }, {usePost: true});
+    setState({loading: false});
+    if (res.ok) {
+      setMsg('success', 'ส่งคำตอบสำเร็จ');
+      setState({screen: 'as_home'});
+    } else {
+      setMsg('error', res.error);
+    }
+  } catch (e) {
+    setState({loading: false});
+    setMsg('error', 'ส่งไม่ได้: ' + e.message);
+  }
+}
+
+// ============================================================
+// ADMIN HOME — Survey List
+// ============================================================
+
+async function renderAdminHome(app) {
+  app.appendChild(adminTabs('admin_home'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  let res;
+  try { res = await api('admin_list_surveys', {token: state.token}); }
+  catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+  
+  if (!res.ok) {
+    if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  
+  div.innerHTML = `
+    <div class="card">
+      <h2>Survey ทั้งหมด (${res.surveys.length})</h2>
+      ${res.surveys.length === 0 ? '<div class="empty">ยังไม่มี survey — ไปที่ "สร้าง Survey" เพื่อเริ่ม</div>' : `
+        <table>
+          <thead><tr><th>ชื่อ</th><th>สาขา</th><th>คำถาม</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody>
+            ${res.surveys.map(s => `
+              <tr>
+                <td>
+                  <div style="font-weight: 500;">${escapeHtml(s.title)}</div>
+                  <div style="font-size: 12px; color: var(--text-soft);">${formatDate(s.created_at)}</div>
+                </td>
+                <td>${s.branch_count}</td>
+                <td>${s.question_count}</td>
+                <td><span class="badge badge-${s.status === 'published' ? 'submitted' : 'draft'}">${s.status}</span></td>
+                <td><button class="btn btn-sm" data-id="${escapeHtml(s.survey_id)}">ดู Progress</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+  
+  div.querySelectorAll('[data-id]').forEach(b => {
+    b.onclick = () => { setState({data: {survey_id: b.dataset.id}, screen: 'admin_progress'}); };
+  });
+}
+
+function adminTabs(active) {
+  const tabs = [
+    {key: 'admin_home', label: 'รายการ Survey'},
+    {key: 'admin_create', label: '+ สร้าง Survey'},
+    {key: 'admin_users', label: 'จัดการ User'},
+    {key: 'admin_settings', label: 'ตั้งค่า'}
+  ];
+  const div = document.createElement('div');
+  div.className = 'nav-tabs';
+  div.innerHTML = tabs.map(t => `
+    <button class="nav-tab ${t.key === active ? 'active' : ''}" data-key="${t.key}">${t.label}</button>
+  `).join('');
+  div.querySelectorAll('.nav-tab').forEach(b => {
+    b.onclick = () => setState({screen: b.dataset.key, data: {}});
+  });
+  return div;
+}
+
+function formatDate(s) {
+  if (!s) return '';
+  try { return new Date(s).toLocaleString('th-TH'); } catch (e) { return s; }
+}
+
+// ============================================================
+// ADMIN CREATE SURVEY
+// ============================================================
+
+async function renderAdminCreate(app) {
+  app.appendChild(adminTabs('admin_create'));
+  
+  // Initialize draft if not exist
+  if (!state.data.draft) {
+    state.data.draft = {
+      title: '',
+      description: '',
+      deadline: '',
+      questions: [],
+      branch_codes: []
+    };
+  }
+  
+  const draft = state.data.draft;
+  
+  // Load branches once
+  let branches = state.data.branches;
+  if (!branches) {
+    const div = document.createElement('div');
+    app.appendChild(div);
+    div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลดสาขา...</div>';
+    try {
+      const res = await api('admin_get_branches', {token: state.token});
+      if (!res.ok) {
+        if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+        div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+        return;
+      }
+      state.data.branches = res.branches;
+      div.remove();
+      branches = res.branches;
+    } catch (e) {
+      div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  
+  div.innerHTML = `
+    <div class="card">
+      <h2>1. ข้อมูลพื้นฐาน</h2>
+      <div class="form-row">
+        <label>ชื่อ Survey <span class="required">*</span></label>
+        <input type="text" id="titleInput" value="${escapeHtml(draft.title)}" placeholder="เช่น สำรวจราคาคู่แข่ง ตค. 2026" />
+      </div>
+      <div class="form-row">
+        <label>คำอธิบาย</label>
+        <textarea id="descInput">${escapeHtml(draft.description)}</textarea>
+      </div>
+      <div class="form-row">
+        <label>กำหนดส่งภายใน (deadline)</label>
+        <input type="date" id="deadlineInput" value="${escapeHtml(draft.deadline)}" />
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>2. คำถาม (${draft.questions.length})</h2>
+      <div id="questionsList"></div>
+      <button class="btn btn-secondary mt-12" id="addQBtn">+ เพิ่มคำถาม</button>
+    </div>
+    
+    <div class="card">
+      <h2>3. เลือกสาขา</h2>
+      <div class="filter-row">
+        <select id="acctFilter"><option value="">ทุก Account</option>${[...new Set(branches.map(b => b.account))].filter(Boolean).map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}</select>
+        <select id="regFilter"><option value="">ทุก Region</option>${[...new Set(branches.map(b => b.region))].filter(Boolean).map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}</select>
+        <input type="text" id="qFilter" placeholder="ค้นหาชื่อสาขา..." />
+      </div>
+      <div class="gap-8 mb-12">
+        <button class="btn btn-secondary btn-sm" id="selAllBtn">เลือกทั้งหมดที่กรอง</button>
+        <button class="btn btn-secondary btn-sm" id="clearBtn">ล้างการเลือกทั้งหมด</button>
+      </div>
+      <div class="branch-picker" id="branchPicker"></div>
+      
+      <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);" id="selectedSummary"></div>
+    </div>
+    
+    <div class="card">
+      <button class="btn btn-success btn-block" id="publishBtn">เผยแพร่ Survey</button>
+    </div>
+  `;
+  
+  // Wire inputs
+  div.querySelector('#titleInput').oninput = e => { draft.title = e.target.value; };
+  div.querySelector('#descInput').oninput = e => { draft.description = e.target.value; };
+  div.querySelector('#deadlineInput').oninput = e => { draft.deadline = e.target.value; };
+  
+  // Questions
+  renderQuestionsList(div.querySelector('#questionsList'), draft);
+  div.querySelector('#addQBtn').onclick = () => {
+    draft.questions.push({
+      id: 'q' + (draft.questions.length + 1),
+      text: '',
+      type: 'short_text',
+      required: true,
+      allow_photo: false,
+      photo_required: false,
+      options: []
+    });
+    renderQuestionsList(div.querySelector('#questionsList'), draft);
+    document.querySelector('#questionsList').lastElementChild.querySelector('.q-text').focus();
+  };
+  
+  // Branch filter + selection
+  const renderBranches = () => {
+    const acct = div.querySelector('#acctFilter').value;
+    const reg = div.querySelector('#regFilter').value;
+    const q = div.querySelector('#qFilter').value.toLowerCase();
+    const filtered = branches.filter(b => 
+      (!acct || b.account === acct) &&
+      (!reg || b.region === reg) &&
+      (!q || String(b.branch_name).toLowerCase().includes(q) || String(b.branch_code).toLowerCase().includes(q))
+    );
+    const pick = div.querySelector('#branchPicker');
+    pick.innerHTML = filtered.map(b => `
+      <label>
+        <input type="checkbox" value="${escapeHtml(b.branch_code)}" ${draft.branch_codes.indexOf(String(b.branch_code)) !== -1 ? 'checked' : ''} />
+        <span><strong>${escapeHtml(b.branch_name)}</strong> · ${escapeHtml(b.branch_code)} · ${escapeHtml(b.account || '')} · ${escapeHtml(b.region || '')} · AS: ${escapeHtml(b.assigned_as_code || '-')}</span>
+      </label>
+    `).join('');
+    pick.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.onchange = () => {
+        const v = cb.value;
+        const i = draft.branch_codes.indexOf(v);
+        if (cb.checked && i === -1) draft.branch_codes.push(v);
+        else if (!cb.checked && i !== -1) draft.branch_codes.splice(i, 1);
+        renderSelectedChips();
+      };
+    });
+  };
+  
+  // Always-visible summary of everything selected so far, across every filter round
+  const renderSelectedChips = () => {
+    const box = div.querySelector('#selectedSummary');
+    const selected = draft.branch_codes
+      .map(code => branches.find(b => String(b.branch_code) === String(code)))
+      .filter(Boolean);
+    box.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong style="font-size:14px;">เลือกแล้วทั้งหมด: ${draft.branch_codes.length} / ${branches.length} สาขา</strong>
+      </div>
+      ${selected.length === 0 ? '<div style="color: var(--text-soft); font-size: 13px;">ยังไม่ได้เลือกสาขา — ติ๊กจากรายการด้านบนได้เลย เลือกหลายรอบผ่าน filter ต่างกันได้ ของเดิมจะไม่หาย</div>' : `
+        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:160px; overflow-y:auto;">
+          ${selected.map(b => `
+            <span style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:999px; padding:4px 6px 4px 10px; font-size:12px;">
+              ${escapeHtml(b.branch_name)} (${escapeHtml(b.branch_code)})
+              <button class="chip-remove" data-code="${escapeHtml(b.branch_code)}" style="background:none; border:none; color:#1e40af; cursor:pointer; font-size:14px; line-height:1; padding:0 2px;">×</button>
+            </span>
+          `).join('')}
+        </div>
+      `}
+    `;
+    box.querySelectorAll('.chip-remove').forEach(btn => {
+      btn.onclick = () => {
+        const i = draft.branch_codes.indexOf(btn.dataset.code);
+        if (i !== -1) draft.branch_codes.splice(i, 1);
+        renderBranches();
+        renderSelectedChips();
+      };
+    });
+  };
+  
+  div.querySelector('#acctFilter').onchange = renderBranches;
+  div.querySelector('#regFilter').onchange = renderBranches;
+  div.querySelector('#qFilter').oninput = renderBranches;
+  div.querySelector('#selAllBtn').onclick = () => {
+    const pick = div.querySelector('#branchPicker');
+    pick.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+    });
+  };
+  div.querySelector('#clearBtn').onclick = () => {
+    if (draft.branch_codes.length > 0 && !confirm('ล้างสาขาที่เลือกไว้ทั้งหมด ' + draft.branch_codes.length + ' สาขา?')) return;
+    draft.branch_codes = [];
+    renderBranches();
+    renderSelectedChips();
+  };
+  renderBranches();
+  renderSelectedChips();
+  
+  div.querySelector('#publishBtn').onclick = async () => {
+    if (!draft.title.trim()) { setMsg('error', 'กรุณากรอกชื่อ survey'); return; }
+    if (draft.questions.length === 0) { setMsg('error', 'กรุณาเพิ่มคำถามอย่างน้อย 1 ข้อ'); return; }
+    for (const q of draft.questions) {
+      if (!q.text.trim()) { setMsg('error', 'มีคำถามที่ยังไม่มีข้อความ'); return; }
+      if ((q.type === 'single_choice' || q.type === 'multiple_choice') && (!q.options || q.options.length === 0)) {
+        setMsg('error', 'คำถามแบบเลือกตอบต้องมีตัวเลือกอย่างน้อย 1 ข้อ: ' + q.text); return;
+      }
+    }
+    if (draft.branch_codes.length === 0) { setMsg('error', 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา'); return; }
+    
+    const selectedNames = draft.branch_codes
+      .map(code => { const b = branches.find(x => String(x.branch_code) === String(code)); return b ? b.branch_name + ' (' + b.branch_code + ')' : code; });
+    const CAP = 15;
+    const previewList = selectedNames.slice(0, CAP).map(n => '• ' + n).join('\n') +
+      (selectedNames.length > CAP ? '\n... และอีก ' + (selectedNames.length - CAP) + ' สาขา' : '');
+    const confirmMsg = `ยืนยันเผยแพร่ survey "${draft.title}"\n\nไปยัง ${draft.branch_codes.length} สาขา:\n${previewList}\n\nถูกต้องไหม?`;
+    
+    if (!confirm(confirmMsg)) return;
+    
+    setState({loading: true});
+    try {
+      const res = await api('admin_create_survey', {
+        token: state.token,
+        title: draft.title,
+        description: draft.description,
+        deadline: draft.deadline,
+        questions: draft.questions,
+        selected_branches: draft.branch_codes
+      }, {usePost: true});
+      setState({loading: false});
+      if (res.ok) {
+        setMsg('success', 'เผยแพร่สำเร็จ');
+        setState({screen: 'admin_home', data: {}});
+      } else {
+        setMsg('error', res.error);
+      }
+    } catch (e) {
+      setState({loading: false});
+      setMsg('error', e.message);
+    }
+  };
+}
+
+function renderQuestionsList(container, draft) {
+  container.innerHTML = '';
+  if (draft.questions.length === 0) {
+    container.innerHTML = '<div class="empty" style="padding: 20px;">ยังไม่มีคำถาม</div>';
+    return;
+  }
+  draft.questions.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'question-card';
+    card.innerHTML = `
+      <div class="qhead">
+        <div class="qnum">${i + 1}</div>
+        <div style="flex: 1;">
+          <input type="text" class="q-text" placeholder="คำถาม" value="${escapeHtml(q.text)}" />
+        </div>
+        <button class="btn btn-sm btn-secondary q-del" title="ลบ">×</button>
+      </div>
+      <div class="form-row inline" style="margin-top: 10px;">
+        <select class="q-type">
+          <option value="short_text" ${q.type==='short_text'?'selected':''}>ข้อความสั้น</option>
+          <option value="long_text" ${q.type==='long_text'?'selected':''}>ข้อความยาว</option>
+          <option value="number" ${q.type==='number'?'selected':''}>ตัวเลข</option>
+          <option value="single_choice" ${q.type==='single_choice'?'selected':''}>เลือก 1 ข้อ</option>
+          <option value="multiple_choice" ${q.type==='multiple_choice'?'selected':''}>เลือกได้หลายข้อ</option>
+        </select>
+        <label style="display: inline-flex; gap: 4px; font-weight: 400;"><input type="checkbox" class="q-req" ${q.required?'checked':''}/>บังคับ</label>
+        <label style="display: inline-flex; gap: 4px; font-weight: 400;"><input type="checkbox" class="q-photo" ${q.allow_photo?'checked':''}/>แนบรูปได้</label>
+        <label style="display: inline-flex; gap: 4px; font-weight: 400;"><input type="checkbox" class="q-photoreq" ${q.photo_required?'checked':''}/>บังคับแนบรูป</label>
+      </div>
+      ${(q.type === 'single_choice' || q.type === 'multiple_choice') ? `
+        <div class="form-row" style="margin-top: 10px;">
+          <label>ตัวเลือก (คั่นด้วย comma)</label>
+          <input type="text" class="q-opts" value="${escapeHtml((q.options || []).join(', '))}" placeholder="A, B, C" />
+        </div>
+      ` : ''}
+    `;
+    container.appendChild(card);
+    
+    card.querySelector('.q-text').oninput = e => { q.text = e.target.value; };
+    card.querySelector('.q-type').onchange = e => {
+      q.type = e.target.value;
+      if (q.type !== 'single_choice' && q.type !== 'multiple_choice') q.options = [];
+      renderQuestionsList(container, draft);
+    };
+    card.querySelector('.q-req').onchange = e => { q.required = e.target.checked; };
+    card.querySelector('.q-photo').onchange = e => {
+      q.allow_photo = e.target.checked;
+      if (!q.allow_photo) q.photo_required = false;
+      renderQuestionsList(container, draft);
+    };
+    card.querySelector('.q-photoreq').onchange = e => {
+      q.photo_required = e.target.checked;
+      if (q.photo_required) q.allow_photo = true;
+      renderQuestionsList(container, draft);
+    };
+    const optsInput = card.querySelector('.q-opts');
+    if (optsInput) optsInput.oninput = e => {
+      q.options = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+    };
+    card.querySelector('.q-del').onclick = () => {
+      if (confirm('ลบคำถามนี้?')) {
+        draft.questions.splice(i, 1);
+        renderQuestionsList(container, draft);
+      }
+    };
+  });
+}
+
+// ============================================================
+// ADMIN PROGRESS + EXPORT + DELETE
+// ============================================================
+
+async function renderAdminProgress(app) {
+  app.appendChild(adminTabs('admin_home'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-secondary btn-sm mb-12';
+  backBtn.textContent = '← กลับรายการ';
+  backBtn.onclick = () => setState({screen: 'admin_home', data: {}});
+  div.appendChild(backBtn);
+  
+  const content = document.createElement('div');
+  div.appendChild(content);
+  content.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  const loadProgress = async () => {
+    try {
+      const res = await api('admin_get_progress', {token: state.token, survey_id: state.data.survey_id});
+      if (!res.ok) {
+        if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+        content.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+        return;
+      }
+      content.innerHTML = `
+        <div class="card">
+          <h2>${escapeHtml(res.survey.title)}</h2>
+          <div class="stat-grid">
+            <div class="stat"><div class="num">${res.summary.total}</div><div class="label">ทั้งหมด</div></div>
+            <div class="stat"><div class="num" style="color: var(--success);">${res.summary.submitted}</div><div class="label">ส่งแล้ว</div></div>
+            <div class="stat"><div class="num" style="color: var(--pending);">${res.summary.pending}</div><div class="label">ค้าง</div></div>
+          </div>
+          <div>ความคืบหน้า ${res.summary.percent}%</div>
+          <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
+          
+          <div class="gap-8 mt-12">
+            <button class="btn btn-sm" id="refreshBtn">🔄 รีเฟรช</button>
+            <button class="btn btn-sm btn-secondary" id="exportBtn">📥 Export Excel (CSV)</button>
+            <button class="btn btn-sm btn-danger" id="deleteBtn">🗑️ ลบ Survey + คำตอบ</button>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h3>รายละเอียดสาขา</h3>
+          <table>
+            <thead><tr><th>Account</th><th>Region</th><th>AS</th><th>สาขา</th><th>สถานะ</th><th>เวลาส่ง</th></tr></thead>
+            <tbody>
+              ${res.rows.map(r => `
+                <tr>
+                  <td>${escapeHtml(r.account)}</td>
+                  <td>${escapeHtml(r.region)}</td>
+                  <td>${escapeHtml(r.as_code)}</td>
+                  <td>${escapeHtml(r.branch_name)} <span style="color: var(--text-soft); font-size: 12px;">(${escapeHtml(r.branch_code)})</span></td>
+                  <td><span class="badge badge-${r.status}">${r.status === 'pending' ? 'ค้าง' : 'ส่งแล้ว'}</span></td>
+                  <td style="font-size: 12px; color: var(--text-soft);">${r.submitted_at ? formatDate(r.submitted_at) : '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      content.querySelector('#refreshBtn').onclick = loadProgress;
+      content.querySelector('#exportBtn').onclick = exportSurvey;
+      content.querySelector('#deleteBtn').onclick = deleteSurvey;
+    } catch (e) {
+      content.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`;
+    }
+  };
+  
+  loadProgress();
+}
+
+async function exportSurvey() {
+  setState({loading: true});
+  try {
+    const res = await api('admin_export', {token: state.token, survey_id: state.data.survey_id});
+    setState({loading: false});
+    if (!res.ok) { setMsg('error', res.error); return; }
+    
+    // Build CSV with BOM for Excel UTF-8 support
+    const csvRows = [res.headers, ...res.rows];
+    const csv = '\uFEFF' + csvRows.map(row => 
+      row.map(cell => {
+        const s = String(cell == null ? '' : cell);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = res.survey_title.replace(/[^a-zA-Z0-9ก-๙\s_-]/g, '') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg('success', 'ดาวน์โหลด CSV สำเร็จ — เปิดด้วย Excel ได้');
+  } catch (e) {
+    setState({loading: false});
+    setMsg('error', e.message);
+  }
+}
+
+async function deleteSurvey() {
+  if (!confirm('ลบ survey นี้และคำตอบทั้งหมด? ดำเนินการนี้ไม่สามารถยกเลิกได้')) return;
+  if (!confirm('ยืนยันอีกครั้ง: ลบจริงนะ?')) return;
+  
+  setState({loading: true});
+  try {
+    const res = await api('admin_delete_survey', {
+      token: state.token,
+      survey_id: state.data.survey_id,
+      confirm: 'DELETE'
+    });
+    setState({loading: false});
+    if (res.ok) {
+      setMsg('success', res.message);
+      setState({screen: 'admin_home', data: {}});
+    } else {
+      setMsg('error', res.error);
+    }
+  } catch (e) {
+    setState({loading: false});
+    setMsg('error', e.message);
+  }
+}
+
+// ============================================================
+// ADMIN SETTINGS
+// ============================================================
+
+// ============================================================
+// ADMIN USERS — list, add one, bulk add from pasted Excel data
+// ============================================================
+
+async function renderAdminUsers(app) {
+  app.appendChild(adminTabs('admin_users'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  let res;
+  try { res = await api('admin_get_users', {token: state.token}); }
+  catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+  if (!res.ok) {
+    if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  
+  const users = res.users;
+  
+  div.innerHTML = `
+    <div class="card">
+      <h2>User ทั้งหมด (${users.length})</h2>
+      <table>
+        <thead><tr><th>Code</th><th>ชื่อ</th><th>Role</th><th>เบอร์</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${escapeHtml(u.login_code)}</td>
+              <td>${escapeHtml(u.name)}</td>
+              <td>${u.role === 'super_admin' ? 'Admin' : 'AS'}</td>
+              <td>${escapeHtml(u.phone || '-')}</td>
+              <td><span class="badge badge-${u.status === 'active' ? 'submitted' : 'draft'}">${u.status}</span></td>
+              <td><button class="btn btn-sm btn-secondary toggle-status" data-code="${escapeHtml(u.login_code)}" data-status="${escapeHtml(u.status)}">${u.status === 'active' ? 'ระงับ' : 'เปิดใช้'}</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="card">
+      <h2>เพิ่ม User คนเดียว</h2>
+      <div class="form-row inline">
+        <input type="text" id="oneCode" placeholder="AS Code" style="text-transform: uppercase;" />
+        <input type="text" id="oneName" placeholder="ชื่อ" />
+      </div>
+      <div class="form-row inline">
+        <input type="text" id="onePhone" placeholder="เบอร์โทร (ไม่บังคับ)" />
+        <select id="oneRole"><option value="as">AS</option><option value="super_admin">Admin</option></select>
+      </div>
+      <div class="form-row inline">
+        <input type="text" id="onePin" placeholder="PIN (6 หลักขึ้นไป)" inputmode="numeric" />
+        <button class="btn" id="genPinBtn" type="button">สุ่ม PIN</button>
+      </div>
+      <button class="btn btn-block" id="addOneBtn">เพิ่ม User</button>
+    </div>
+    
+    <div class="card">
+      <h2>เพิ่มหลายคนพร้อมกัน (Bulk)</h2>
+      <p style="color: var(--text-soft); font-size: 13px;">
+        Copy จาก Excel มาวางได้เลย บรรทัดละ 1 คน คั่นด้วย comma หรือ tab: <br>
+        <code>AS Code, ชื่อ, เบอร์โทร, PIN, role</code><br>
+        คอลัมน์ PIN และ role <strong>ไม่บังคับ</strong> — เว้น PIN ไว้ว่างได้ ระบบจะสุ่มให้อัตโนมัติ ถ้าระบุ PIN เอง (6 หลักขึ้นไป) ระบบจะใช้ตามที่กำหนด ไม่สุ่มทับ · role ไม่ใส่ค่าเริ่มต้นคือ AS
+      </p>
+      <textarea id="bulkInput" rows="6" placeholder="BKK10, สมชาย ใจดี, 0891234567, 111111
+BKK11, สมหญิง รักงาน, 0892223333"></textarea>
+      <button class="btn btn-block mt-12" id="bulkBtn">นำเข้าทั้งหมด</button>
+      <div id="bulkResult" class="mt-12"></div>
+    </div>
+  `;
+  
+  div.querySelectorAll('.toggle-status').forEach(btn => {
+    btn.onclick = async () => {
+      const newStatus = btn.dataset.status === 'active' ? 'suspended' : 'active';
+      if (!confirm((newStatus === 'suspended' ? 'ระงับ' : 'เปิดใช้งาน') + ' user "' + btn.dataset.code + '"?')) return;
+      setState({loading: true});
+      try {
+        const r = await api('admin_set_user_status', {token: state.token, login_code: btn.dataset.code, status: newStatus});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_users'}); }
+        else setMsg('error', r.error);
+      } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+    };
+  });
+  
+  div.querySelector('#genPinBtn').onclick = () => {
+    let pin = '';
+    for (let i = 0; i < 6; i++) pin += Math.floor(Math.random() * 10);
+    div.querySelector('#onePin').value = pin;
+  };
+  
+  div.querySelector('#addOneBtn').onclick = async () => {
+    const code = div.querySelector('#oneCode').value.trim();
+    const name = div.querySelector('#oneName').value.trim();
+    const phone = div.querySelector('#onePhone').value.trim();
+    const role = div.querySelector('#oneRole').value;
+    const pin = div.querySelector('#onePin').value.trim();
+    
+    if (!code || !name) { setMsg('error', 'กรุณากรอก Code และชื่อ'); return; }
+    if (pin.length < 6 || !/^\d+$/.test(pin)) { setMsg('error', 'PIN ต้องเป็นตัวเลขอย่างน้อย 6 หลัก'); return; }
+    
+    setState({loading: true});
+    try {
+      const r = await api('admin_create_user', {token: state.token, login_code: code, name, phone, role, pin}, {usePost: true});
+      setState({loading: false});
+      if (r.ok) {
+        setMsg('success', r.message + ` — แจ้ง PIN "${pin}" ให้ user คนนี้ด้วย`, 8000);
+        setState({screen: 'admin_users'});
+      } else setMsg('error', r.error);
+    } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+  };
+  
+  div.querySelector('#bulkBtn').onclick = async () => {
+    const text = div.querySelector('#bulkInput').value.trim();
+    if (!text) { setMsg('error', 'กรุณาวางข้อมูลก่อน'); return; }
+    
+    setState({loading: true});
+    let r;
+    try { r = await api('admin_bulk_create_users', {token: state.token, rows_text: text}, {usePost: true}); }
+    catch (e) { setState({loading: false}); setMsg('error', e.message); return; }
+    setState({loading: false});
+    
+    if (!r.ok) { setMsg('error', r.error); return; }
+    
+    const resultBox = div.querySelector('#bulkResult');
+    resultBox.innerHTML = `
+      ${r.created.length > 0 ? `
+        <div class="alert alert-success">เพิ่มสำเร็จ ${r.created.length} คน — ก๊อปตารางนี้ไปแจก PIN ให้แต่ละคน</div>
+        <table>
+          <thead><tr><th>Code</th><th>ชื่อ</th><th>เบอร์</th><th>PIN</th></tr></thead>
+          <tbody>
+            ${r.created.map(c => `<tr><td>${escapeHtml(c.login_code)}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.phone||'-')}</td><td><strong>${escapeHtml(c.pin)}</strong></td></tr>`).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+      ${r.skipped.length > 0 ? `
+        <div class="alert alert-error mt-12">ข้าม ${r.skipped.length} รายการ (แก้แล้ววางใหม่ได้)</div>
+        <table>
+          <thead><tr><th>บรรทัด</th><th>ข้อมูลเดิม</th><th>เหตุผล</th></tr></thead>
+          <tbody>
+            ${r.skipped.map(s => `<tr><td>${s.line}</td><td>${escapeHtml(s.raw)}</td><td>${escapeHtml(s.reason)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+    `;
+    if (r.created.length > 0) div.querySelector('#bulkInput').value = '';
+  };
+}
+
+function renderAdminSettings(app) {
+  app.appendChild(adminTabs('admin_settings'));
+  
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.innerHTML = `
+    <h2>ตั้งค่า</h2>
+    <div class="form-row">
+      <label>API URL</label>
+      <input type="text" id="apiUrlInput" value="${escapeHtml(getApiUrl())}" />
+    </div>
+    <button class="btn" id="saveBtn">บันทึก</button>
+    <button class="btn btn-secondary mt-12" id="testBtn">ทดสอบเชื่อมต่อ</button>
+    
+    <h3 style="margin-top: 24px;">เกี่ยวกับระบบ</h3>
+    <div style="color: var(--text-soft); font-size: 13px;">
+      <p>AS Survey System (Lite) — v1.0</p>
+      <p>Backend: Google Apps Script + Sheets</p>
+      <p>Frontend: Static HTML on GitHub Pages</p>
+    </div>
+  `;
+  app.appendChild(div);
+  
+  div.querySelector('#saveBtn').onclick = () => {
+    const url = div.querySelector('#apiUrlInput').value.trim();
+    localStorage.setItem('api_url', url);
+    setMsg('success', 'บันทึกแล้ว');
+  };
+  div.querySelector('#testBtn').onclick = async () => {
+    try {
+      const res = await api('ping');
+      if (res.ok) setMsg('success', 'เชื่อมต่อสำเร็จ — server time: ' + res.time);
+      else setMsg('error', 'เชื่อมต่อล้มเหลว');
+    } catch (e) {
+      setMsg('error', 'เชื่อมต่อไม่ได้: ' + e.message);
+    }
+  };
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+
+if (state.user) goHome();
+else render();
+</script>
+</body>
+</html>
