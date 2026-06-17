@@ -884,6 +884,8 @@ function renderAsSurvey(app) {
     if (state.data.surveyGroup) setState({screen: 'as_survey_branches', data: {surveyGroup: state.data.surveyGroup}});
     else setState({screen: 'as_home'});
   };
+  
+  const qc = div.querySelector('#questionsContainer');
   survey.questions.forEach((q, i) => qc.appendChild(renderQuestion(q, i, answers[q.id] || {})));
   
   div.querySelector('#submitBtn').onclick = submitSurvey;
