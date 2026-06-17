@@ -612,6 +612,7 @@ function render() {
     as_login: renderAsLogin,
     admin_login: renderAdminLogin,
     as_home: renderAsHome,
+    as_survey_branches: renderAsSurveyBranches,
     as_survey: renderAsSurvey,
     admin_home: renderAdminHome,
     admin_create: renderAdminCreate,
@@ -719,58 +720,118 @@ async function renderAsHome(app) {
     return;
   }
   
-  const pending = res.tasks.filter(t => t.status === 'pending');
-  const done = res.tasks.filter(t => t.status === 'submitted');
+  const surveyGroups = groupTasksBySurvey(res.tasks);
+  const completedCount = surveyGroups.filter(isGroupComplete).length;
   
   div.innerHTML = `
     <div class="stat-grid">
-      <div class="stat"><div class="num">${res.tasks.length}</div><div class="label">ทั้งหมด</div></div>
-      <div class="stat"><div class="num" style="color: var(--pending);">${pending.length}</div><div class="label">ค้าง</div></div>
-      <div class="stat"><div class="num" style="color: var(--success);">${done.length}</div><div class="label">ส่งแล้ว</div></div>
+      <div class="stat"><div class="num">${surveyGroups.length}</div><div class="label">Survey ทั้งหมด</div></div>
+      <div class="stat"><div class="num" style="color: var(--pending);">${surveyGroups.length - completedCount}</div><div class="label">ยังไม่เสร็จ</div></div>
+      <div class="stat"><div class="num" style="color: var(--success);">${completedCount}</div><div class="label">เสร็จแล้ว</div></div>
     </div>
     
-    ${pending.length > 0 ? `
+    ${surveyGroups.length === 0 ? `
+      <div class="card empty">ยังไม่มี survey สำหรับสาขาที่คุณดูแล</div>
+    ` : `
       <div class="card">
-        <h2>งานค้าง (${pending.length})</h2>
+        <h2>Survey ทั้งหมด (${surveyGroups.length})</h2>
         <div class="task-list">
-          ${pending.map(taskHtml).join('')}
+          ${surveyGroups.map((g, i) => surveyGroupCardHtml(g, i)).join('')}
         </div>
       </div>
-    ` : ''}
-    
-    ${done.length > 0 ? `
-      <div class="card">
-        <h2>ส่งแล้ว (${done.length})</h2>
-        <div class="task-list">
-          ${done.map(taskHtml).join('')}
-        </div>
-      </div>
-    ` : ''}
-    
-    ${res.tasks.length === 0 ? `
-      <div class="card empty">ยังไม่มีงานสำหรับสาขาที่คุณดูแล</div>
-    ` : ''}
+    `}
   `;
   
-  div.querySelectorAll('[data-survey-id]').forEach(el => {
-    el.onclick = () => openSurvey(el.dataset.surveyId, el.dataset.branchCode);
+  div.querySelectorAll('[data-survey-idx]').forEach(el => {
+    el.onclick = () => openSurveyBranches(surveyGroups[parseInt(el.dataset.surveyIdx)]);
   });
 }
 
-function taskHtml(t) {
+function groupTasksBySurvey(tasks) {
+  const map = {};
+  const order = [];
+  tasks.forEach(t => {
+    if (!map[t.survey_id]) {
+      map[t.survey_id] = {
+        survey_id: t.survey_id,
+        survey_title: t.survey_title,
+        survey_description: t.survey_description,
+        deadline: t.deadline,
+        branches: []
+      };
+      order.push(t.survey_id);
+    }
+    map[t.survey_id].branches.push(t);
+  });
+  return order.map(id => map[id]);
+}
+
+function isGroupComplete(g) {
+  return g.branches.length > 0 && g.branches.every(b => b.status === 'submitted');
+}
+
+function surveyGroupCardHtml(g, idx) {
+  const total = g.branches.length;
+  const submitted = g.branches.filter(b => b.status === 'submitted').length;
+  const complete = isGroupComplete(g);
   return `
-    <div class="task" data-survey-id="${escapeHtml(t.survey_id)}" data-branch-code="${escapeHtml(t.branch_code)}">
+    <div class="task survey-group-card" data-survey-idx="${idx}" style="${complete ? 'border-color: #a7f3d0; background: #f0fdf4;' : ''}">
       <div class="top">
-        <div class="branch">${escapeHtml(t.branch_name)}</div>
-        <span class="badge badge-${t.status}">${t.status === 'pending' ? 'ค้าง' : 'ส่งแล้ว'}</span>
+        <div class="branch">${escapeHtml(g.survey_title)}</div>
+        <span class="badge badge-${complete ? 'submitted' : 'pending'}" style="${complete ? 'font-weight:600;' : ''}">${complete ? '✅ Complete Survey' : submitted + '/' + total + ' สาขา'}</span>
       </div>
-      <div class="survey">${escapeHtml(t.survey_title)} · ${escapeHtml(t.account || '')}</div>
+      <div class="survey">${total} สาขาที่ต้องทำ${g.deadline ? ' · กำหนดส่ง ' + new Date(g.deadline).toLocaleDateString('th-TH') : ''}</div>
     </div>
   `;
 }
 
-async function openSurvey(surveyId, branchCode) {
-  setState({loading: true, data: {survey_id: surveyId, branch_code: branchCode}});
+function openSurveyBranches(surveyGroup) {
+  setState({screen: 'as_survey_branches', data: {surveyGroup}});
+}
+
+function renderAsSurveyBranches(app) {
+  const {surveyGroup} = state.data;
+  if (!surveyGroup) { setState({screen: 'as_home'}); return; }
+  
+  const total = surveyGroup.branches.length;
+  const submitted = surveyGroup.branches.filter(b => b.status === 'submitted').length;
+  const complete = isGroupComplete(surveyGroup);
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = `
+    <div class="card">
+      <button class="btn btn-secondary btn-sm" id="backBtn">← กลับรายการ Survey</button>
+      <h2 style="margin-top: 12px;">${escapeHtml(surveyGroup.survey_title)}</h2>
+      ${surveyGroup.survey_description ? `<p style="color: var(--text-soft);">${escapeHtml(surveyGroup.survey_description)}</p>` : ''}
+      ${complete ? `<div class="alert alert-success" style="margin-top:12px; font-weight:600;">✅ Complete Survey — ทำครบทุกสาขาแล้ว</div>` : ''}
+    </div>
+    
+    <div class="card">
+      <h2>สาขาที่ต้องทำ (${submitted}/${total})</h2>
+      <div class="task-list">
+        ${surveyGroup.branches.map(b => `
+          <div class="task" data-branch-code="${escapeHtml(b.branch_code)}">
+            <div class="top">
+              <div class="branch">${escapeHtml(b.branch_name)}</div>
+              <span class="badge badge-${b.status}">${b.status === 'pending' ? 'ค้าง' : 'ส่งแล้ว'}</span>
+            </div>
+            <div class="survey">${escapeHtml(b.account || '')}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  
+  div.querySelector('#backBtn').onclick = () => setState({screen: 'as_home'});
+  div.querySelectorAll('[data-branch-code]').forEach(el => {
+    el.onclick = () => openSurvey(surveyGroup.survey_id, el.dataset.branchCode, surveyGroup);
+  });
+}
+
+async function openSurvey(surveyId, branchCode, surveyGroup) {
+  const keepGroup = surveyGroup || state.data.surveyGroup;
+  setState({loading: true});
   try {
     const res = await api('get_survey', {token: state.token, survey_id: surveyId, branch_code: branchCode});
     setState({loading: false});
@@ -781,7 +842,8 @@ async function openSurvey(surveyId, branchCode) {
         survey: res.survey,
         branch: res.branch,
         answers: res.existing_answers || {},
-        already_submitted: res.already_submitted
+        already_submitted: res.already_submitted,
+        surveyGroup: keepGroup
       }
     });
   } catch (e) {
@@ -818,9 +880,10 @@ function renderAsSurvey(app) {
     </div>
   `;
   
-  div.querySelector('#backBtn').onclick = () => setState({screen: 'as_home'});
-  
-  const qc = div.querySelector('#questionsContainer');
+  div.querySelector('#backBtn').onclick = () => {
+    if (state.data.surveyGroup) setState({screen: 'as_survey_branches', data: {surveyGroup: state.data.surveyGroup}});
+    else setState({screen: 'as_home'});
+  };
   survey.questions.forEach((q, i) => qc.appendChild(renderQuestion(q, i, answers[q.id] || {})));
   
   div.querySelector('#submitBtn').onclick = submitSurvey;
@@ -985,7 +1048,14 @@ async function submitSurvey() {
     setState({loading: false});
     if (res.ok) {
       setMsg('success', 'ส่งคำตอบสำเร็จ');
-      setState({screen: 'as_home'});
+      const surveyGroup = state.data.surveyGroup;
+      if (surveyGroup) {
+        const b = surveyGroup.branches.find(b => b.branch_code === state.data.branch.branch_code);
+        if (b) b.status = 'submitted';
+        setState({screen: 'as_survey_branches', data: {surveyGroup}});
+      } else {
+        setState({screen: 'as_home'});
+      }
     } else {
       setMsg('error', res.error);
     }
