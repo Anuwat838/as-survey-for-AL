@@ -211,7 +211,7 @@
 // CONFIG
 // ============================================================
 
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwFVX3jSLNX-cLuEil7lMWJAfdJwf0Ku5IhXaH8RvbGndj80fLLzid6J4LUdZtk6as6Kg/exec';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz-K4qsc2nRyoGZkZ4-SxBX2IFWsW-evDAlybz3eC-stzBb9otK4TRZBcviWD9wAAbdKA/exec';
 
 function getApiUrl() {
   return localStorage.getItem('api_url') || DEFAULT_API_URL;
@@ -677,6 +677,9 @@ function renderLoginForm(app, title, fromScreen, codeLabel, action) {
   `;
   app.appendChild(div);
   div.querySelector('#backBtn').onclick = () => setState({screen: 'splash'});
+  const codeInput = div.querySelector('#codeInput');
+  codeInput.style.textTransform = 'uppercase';
+  codeInput.oninput = () => { codeInput.value = codeInput.value.toUpperCase(); };
   div.querySelector('#loginBtn').onclick = async () => {
     const code = div.querySelector('#codeInput').value.trim();
     const pin = div.querySelector('#pinInput').value.trim();
@@ -1585,6 +1588,9 @@ BKK11, สมหญิง รักงาน, 0892223333"></textarea>
       } catch (e) { setState({loading: false}); setMsg('error', e.message); }
     };
   });
+  
+  const oneCodeInput = div.querySelector('#oneCode');
+  oneCodeInput.oninput = () => { oneCodeInput.value = oneCodeInput.value.toUpperCase(); };
   
   div.querySelector('#genPinBtn').onclick = () => {
     let pin = '';
