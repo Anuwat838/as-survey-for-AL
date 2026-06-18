@@ -272,8 +272,8 @@ let demoMode = false;
 function makeSeedDB() {
   return {
     users: [
-      {login_code: 'ADM01', name: 'Admin (Demo)', role: 'super_admin', status: 'active'},
-      {login_code: 'AS01', name: 'สมชาย ใจดี', role: 'as', status: 'active'}
+      {login_code: 'ADM01', name: 'Admin (Demo)', role: 'super_admin', status: 'active', phone: '0811112222'},
+      {login_code: 'AS01', name: 'สมชาย ใจดี', role: 'as', status: 'active', phone: '0891234567'}
     ],
     branches: [
       {branch_code: 'BKK001', branch_name: 'Big C ลาดพร้าว', account: 'Big C', region: 'Central', province: 'กรุงเทพ', assigned_as_code: 'AS01', status: 'active'},
@@ -291,7 +291,12 @@ function makeSeedDB() {
         {id: 'q3', text: 'การจัดวางสินค้าเป็นไปตาม planogram หรือไม่', type: 'single_choice', required: true, allow_photo: true, photo_required: true, options: ['ตรงตาม planogram', 'ไม่ตรง']},
         {id: 'q4', text: 'หมายเหตุเพิ่มเติม', type: 'long_text', required: false, allow_photo: false, photo_required: false}
       ]),
-      selected_branches_json: JSON.stringify(['BKK001', 'BKK002', 'CNX001', 'KKN001']),
+      selected_branches_json: JSON.stringify([
+        {code: 'BKK001', remark: 'ร้านทำผลงานดี - หาว่าอะไรที่ทำให้สำเร็จ'},
+        {code: 'BKK002', remark: 'ร้านทำผลงานดี - หาว่าอะไรที่ทำให้สำเร็จ'},
+        {code: 'CNX001', remark: 'ร้านทำได้ไม่ดี - ระบุ pain point หลัก'},
+        {code: 'KKN001', remark: ''}
+      ]),
       deadline: new Date(Date.now() + 3*24*3600*1000).toISOString().slice(0,10),
       status: 'published',
       created_at: new Date().toISOString()
@@ -318,6 +323,17 @@ function mockGenId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.floor(Math.random()*9999);
 }
 
+function mockParseSelectedBranches(jsonStr) {
+  let parsed;
+  try { parsed = JSON.parse(jsonStr || '[]'); } catch (e) { return []; }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map(item => {
+    if (typeof item === 'string') return {code: item, remark: ''};
+    if (item && typeof item === 'object') return {code: String(item.code || ''), remark: String(item.remark || '')};
+    return null;
+  }).filter(b => b && b.code);
+}
+
 function mockApi(action, p) {
   const ok = (extra) => ({ok: true, ...extra});
   const fail = (error) => ({ok: false, error});
@@ -342,9 +358,10 @@ function mockApi(action, p) {
       const myCodes = myBranches.map(b => b.branch_code);
       const tasks = [];
       mockDB.surveys.filter(s => s.status === 'published').forEach(s => {
-        const sel = JSON.parse(s.selected_branches_json);
+        const sel = mockParseSelectedBranches(s.selected_branches_json);
+        const selCodes = sel.map(x => x.code);
         myCodes.forEach(bc => {
-          if (sel.indexOf(bc) === -1) return;
+          if (selCodes.indexOf(bc) === -1) return;
           const branch = myBranches.find(b => b.branch_code === bc);
           const submitted = mockDB.responses.some(r => r.survey_id === s.survey_id && r.branch_code === bc);
           tasks.push({
@@ -362,10 +379,13 @@ function mockApi(action, p) {
       const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
       if (!s) return fail('ไม่พบ survey นี้');
       const branch = mockDB.branches.find(b => b.branch_code === p.branch_code);
+      const sel = mockParseSelectedBranches(s.selected_branches_json);
+      const found = sel.find(x => x.code === p.branch_code);
+      const remark = found ? found.remark : '';
       const existing = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === p.branch_code);
       return ok({
         survey: {survey_id: s.survey_id, title: s.title, description: s.description, questions: JSON.parse(s.questions_json), deadline: s.deadline},
-        branch: {branch_code: branch.branch_code, branch_name: branch.branch_name, account: branch.account, region: branch.region},
+        branch: {branch_code: branch.branch_code, branch_name: branch.branch_name, account: branch.account, region: branch.region, remark: remark},
         existing_answers: existing ? JSON.parse(existing.answers_json) : null,
         already_submitted: !!existing
       });
@@ -442,10 +462,13 @@ function mockApi(action, p) {
     
     case 'admin_create_survey': {
       const questions = typeof p.questions === 'string' ? JSON.parse(p.questions) : p.questions;
-      const branches = typeof p.selected_branches === 'string' ? JSON.parse(p.selected_branches) : p.selected_branches;
+      const rawBranches = typeof p.selected_branches === 'string' ? JSON.parse(p.selected_branches) : p.selected_branches;
       if (!p.title) return fail('กรุณากรอกชื่อ survey');
       if (!questions || questions.length === 0) return fail('กรุณาเพิ่มคำถามอย่างน้อย 1 ข้อ');
-      if (!branches || branches.length === 0) return fail('กรุณาเลือกสาขาอย่างน้อย 1 สาขา');
+      if (!rawBranches || rawBranches.length === 0) return fail('กรุณาเลือกสาขาอย่างน้อย 1 สาขา');
+      const branches = rawBranches.map(b => 
+        typeof b === 'string' ? {code: b, remark: ''} : {code: String(b.code||''), remark: String(b.remark||'')}
+      ).filter(b => b.code);
       questions.forEach((q,i) => { if (!q.id) q.id = 'q'+(i+1); });
       const id = mockGenId('S');
       mockDB.surveys.push({survey_id: id, title: p.title, description: p.description||'', questions_json: JSON.stringify(questions), selected_branches_json: JSON.stringify(branches), deadline: p.deadline||'', status: 'published', created_at: new Date().toISOString()});
@@ -457,7 +480,7 @@ function mockApi(action, p) {
         survey_id: s.survey_id, title: s.title, description: s.description, deadline: s.deadline,
         status: s.status, created_at: s.created_at,
         question_count: JSON.parse(s.questions_json).length,
-        branch_count: JSON.parse(s.selected_branches_json).length
+        branch_count: mockParseSelectedBranches(s.selected_branches_json).length
       })).sort((a,b) => b.created_at.localeCompare(a.created_at));
       return ok({surveys});
     }
@@ -465,11 +488,20 @@ function mockApi(action, p) {
     case 'admin_get_progress': {
       const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
       if (!s) return fail('ไม่พบ survey นี้');
-      const sel = JSON.parse(s.selected_branches_json);
-      const rows = sel.map(bc => {
+      const sel = mockParseSelectedBranches(s.selected_branches_json);
+      const rows = sel.map(sb => {
+        const bc = sb.code;
         const branch = mockDB.branches.find(b => b.branch_code === bc) || {};
         const resp = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === bc);
-        return {branch_code: bc, branch_name: branch.branch_name||bc, account: branch.account||'', region: branch.region||'', as_code: branch.assigned_as_code||'', status: resp?'submitted':'pending', submitted_at: resp?resp.submitted_at:''};
+        const asCode = branch.assigned_as_code || '';
+        const asUser = asCode ? mockDB.users.find(u => u.login_code === asCode) : null;
+        return {
+          branch_code: bc, branch_name: branch.branch_name||bc,
+          account: branch.account||'', region: branch.region||'',
+          as_code: asCode, as_name: asUser?asUser.name:'', as_phone: asUser?(asUser.phone||''):'',
+          remark: sb.remark, status: resp?'submitted':'pending',
+          submitted_at: resp?resp.submitted_at:''
+        };
       });
       rows.sort((a,b) => a.status !== b.status ? (a.status==='pending'?-1:1) : (a.account.localeCompare(b.account) || a.region.localeCompare(b.region) || a.as_code.localeCompare(b.as_code) || a.branch_code.localeCompare(b.branch_code)));
       const summary = {total: rows.length, submitted: rows.filter(r=>r.status==='submitted').length, pending: rows.filter(r=>r.status==='pending').length};
@@ -481,18 +513,20 @@ function mockApi(action, p) {
       const s = mockDB.surveys.find(s => s.survey_id === p.survey_id);
       if (!s) return fail('ไม่พบ survey นี้');
       const questions = JSON.parse(s.questions_json);
-      const sel = JSON.parse(s.selected_branches_json);
-      const headers = ['Account','Region','AS Code','Branch Code','Branch Name','Status','Submitted At'];
+      const sel = mockParseSelectedBranches(s.selected_branches_json);
+      const headers = ['Account','Region','AS Code','Branch Code','Branch Name','Remark','Status','Submitted At'];
       questions.forEach(q => { headers.push(q.text); if (q.allow_photo) headers.push(q.text+' (รูป)'); });
-      const rows = sel.map(bc => {
+      const rows = sel.map(sb => {
+        const bc = sb.code;
         const branch = mockDB.branches.find(b => b.branch_code === bc) || {};
         const resp = mockDB.responses.find(r => r.survey_id === p.survey_id && r.branch_code === bc);
         const answers = resp ? JSON.parse(resp.answers_json) : {};
-        const row = [branch.account||'', branch.region||'', branch.assigned_as_code||'', bc, branch.branch_name||'', resp?'submitted':'pending', resp?resp.submitted_at:''];
+        const row = [branch.account||'', branch.region||'', branch.assigned_as_code||'', bc, branch.branch_name||'', sb.remark||'', resp?'submitted':'pending', resp?resp.submitted_at:''];
         questions.forEach(q => { const a = answers[q.id]||{}; row.push(a.value!==undefined?String(a.value):''); if (q.allow_photo) row.push((a.photos||[]).length+' รูป'); });
         return row;
       });
-      rows.sort((a,b) => a[5]!==b[5] ? (a[5]==='pending'?-1:1) : (String(a[0]).localeCompare(b[0])||String(a[1]).localeCompare(b[1])||String(a[2]).localeCompare(b[2])||String(a[3]).localeCompare(b[3])));
+      // Status now at index 6 due to added Remark column
+      rows.sort((a,b) => a[6]!==b[6] ? (a[6]==='pending'?-1:1) : (String(a[0]).localeCompare(b[0])||String(a[1]).localeCompare(b[1])||String(a[2]).localeCompare(b[2])||String(a[3]).localeCompare(b[3])));
       return ok({survey_title: s.title, headers, rows});
     }
     
@@ -873,6 +907,17 @@ function renderAsSurvey(app) {
       </div>
     </div>
     
+    ${branch.remark && branch.remark.trim() ? `
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid var(--warn); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #92400e; margin-bottom: 6px;">
+          📝 หมายเหตุจาก Admin
+        </div>
+        <div style="color: #78350f; font-size: 14px; line-height: 1.6;">
+          ${escapeHtml(branch.remark)}
+        </div>
+      </div>
+    ` : ''}
+    
     <div id="questionsContainer"></div>
     
     <div class="card">
@@ -1148,21 +1193,24 @@ function formatDate(s) {
 async function renderAdminCreate(app) {
   app.appendChild(adminTabs('admin_create'));
   
-  // Initialize draft if not exist
   if (!state.data.draft) {
     state.data.draft = {
       title: '',
       description: '',
       deadline: '',
       questions: [],
-      branch_codes: []
+      branches: []  // array of {code, remark}
     };
+  }
+  // Migrate older drafts (branch_codes) if anyone has stale state
+  if (state.data.draft.branch_codes && !state.data.draft.branches) {
+    state.data.draft.branches = state.data.draft.branch_codes.map(c => ({code: c, remark: ''}));
+    delete state.data.draft.branch_codes;
   }
   
   const draft = state.data.draft;
   
-  // Load branches once
-  let branches = state.data.branches;
+  let branches = state.data.allBranches;
   if (!branches) {
     const div = document.createElement('div');
     app.appendChild(div);
@@ -1174,7 +1222,7 @@ async function renderAdminCreate(app) {
         div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
         return;
       }
-      state.data.branches = res.branches;
+      state.data.allBranches = res.branches;
       div.remove();
       branches = res.branches;
     } catch (e) {
@@ -1182,6 +1230,21 @@ async function renderAdminCreate(app) {
       return;
     }
   }
+  
+  const findInDraft = (code) => draft.branches.find(b => b.code === code);
+  const isInDraft = (code) => draft.branches.some(b => b.code === code);
+  const addToDraft = (code, remark) => {
+    const existing = findInDraft(code);
+    if (existing) {
+      if (remark !== undefined && remark !== '') existing.remark = remark;
+    } else {
+      draft.branches.push({code: code, remark: remark || ''});
+    }
+  };
+  const removeFromDraft = (code) => {
+    const i = draft.branches.findIndex(b => b.code === code);
+    if (i !== -1) draft.branches.splice(i, 1);
+  };
   
   const div = document.createElement('div');
   app.appendChild(div);
@@ -1211,10 +1274,14 @@ async function renderAdminCreate(app) {
     
     <div class="card">
       <h2>3. เลือกสาขา</h2>
+      <div style="font-size: 13px; color: var(--text-soft); margin-bottom: 12px;">วิธีเลือกได้ 2 แบบ — ใช้ผสมกันได้</div>
+      
+      <h3 style="margin-top: 8px;">วิธีที่ 1 · Filter + ติ๊กรายการ</h3>
       <div class="filter-row">
         <select id="acctFilter"><option value="">ทุก Account</option>${[...new Set(branches.map(b => b.account))].filter(Boolean).map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}</select>
         <select id="regFilter"><option value="">ทุก Region</option>${[...new Set(branches.map(b => b.region))].filter(Boolean).map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}</select>
-        <input type="text" id="qFilter" placeholder="ค้นหาชื่อสาขา..." />
+        <select id="asFilter"><option value="">ทุก AS</option>${[...new Set(branches.map(b => b.assigned_as_code))].filter(Boolean).sort().map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}</select>
+        <input type="text" id="qFilter" placeholder="ค้นหา..." />
       </div>
       <div class="gap-8 mb-12">
         <button class="btn btn-secondary btn-sm" id="selAllBtn">เลือกทั้งหมดที่กรอง</button>
@@ -1222,7 +1289,17 @@ async function renderAdminCreate(app) {
       </div>
       <div class="branch-picker" id="branchPicker"></div>
       
-      <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);" id="selectedSummary"></div>
+      <h3 style="margin-top: 24px;">วิธีที่ 2 · วาง Branch Code + Remark</h3>
+      <p style="font-size: 13px; color: var(--text-soft); margin: 0 0 10px;">
+        บรรทัดละ 1 สาขา รูปแบบ <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">Code, Remark</code> (Remark ไม่บังคับ ใส่เพื่อให้ AS เห็น context ก่อนตอบ — comma แรกเป็นตัวคั่น ที่เหลือทั้งหมดเป็น remark)
+      </p>
+      <textarea id="pasteInput" rows="5" placeholder="BKK001, ร้านทำผลงานดี - หาว่าอะไรที่ทำให้สำเร็จ
+BKK010, ร้านทำได้ไม่ดี - ระบุ pain point
+CNX003" style="font-family: ui-monospace, monospace; font-size: 13px;"></textarea>
+      <div id="pastePreview" style="margin-top: 10px;"></div>
+      <button class="btn btn-secondary mt-12" id="pasteAddBtn">+ ตรวจสอบและเพิ่มเข้ารายการ</button>
+      
+      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);" id="selectedSummary"></div>
     </div>
     
     <div class="card">
@@ -1230,88 +1307,103 @@ async function renderAdminCreate(app) {
     </div>
   `;
   
-  // Wire inputs
   div.querySelector('#titleInput').oninput = e => { draft.title = e.target.value; };
   div.querySelector('#descInput').oninput = e => { draft.description = e.target.value; };
   div.querySelector('#deadlineInput').oninput = e => { draft.deadline = e.target.value; };
   
-  // Questions
   renderQuestionsList(div.querySelector('#questionsList'), draft);
   div.querySelector('#addQBtn').onclick = () => {
     draft.questions.push({
       id: 'q' + (draft.questions.length + 1),
-      text: '',
-      type: 'short_text',
-      required: true,
-      allow_photo: false,
-      photo_required: false,
-      options: []
+      text: '', type: 'short_text',
+      required: true, allow_photo: false, photo_required: false, options: []
     });
     renderQuestionsList(div.querySelector('#questionsList'), draft);
     document.querySelector('#questionsList').lastElementChild.querySelector('.q-text').focus();
   };
   
-  // Branch filter + selection
   const renderBranches = () => {
     const acct = div.querySelector('#acctFilter').value;
     const reg = div.querySelector('#regFilter').value;
+    const asFil = div.querySelector('#asFilter').value;
     const q = div.querySelector('#qFilter').value.toLowerCase();
     const filtered = branches.filter(b => 
       (!acct || b.account === acct) &&
       (!reg || b.region === reg) &&
+      (!asFil || String(b.assigned_as_code).trim() === asFil) &&
       (!q || String(b.branch_name).toLowerCase().includes(q) || String(b.branch_code).toLowerCase().includes(q))
     );
     const pick = div.querySelector('#branchPicker');
     pick.innerHTML = filtered.map(b => `
       <label>
-        <input type="checkbox" value="${escapeHtml(b.branch_code)}" ${draft.branch_codes.indexOf(String(b.branch_code)) !== -1 ? 'checked' : ''} />
+        <input type="checkbox" value="${escapeHtml(b.branch_code)}" ${isInDraft(String(b.branch_code)) ? 'checked' : ''} />
         <span><strong>${escapeHtml(b.branch_name)}</strong> · ${escapeHtml(b.branch_code)} · ${escapeHtml(b.account || '')} · ${escapeHtml(b.region || '')} · AS: ${escapeHtml(b.assigned_as_code || '-')}</span>
       </label>
     `).join('');
+    if (filtered.length === 0) {
+      pick.innerHTML = '<div style="text-align:center; color: var(--text-soft); padding: 16px; font-size: 13px;">ไม่พบสาขาตาม filter นี้</div>';
+    }
     pick.querySelectorAll('input[type=checkbox]').forEach(cb => {
       cb.onchange = () => {
-        const v = cb.value;
-        const i = draft.branch_codes.indexOf(v);
-        if (cb.checked && i === -1) draft.branch_codes.push(v);
-        else if (!cb.checked && i !== -1) draft.branch_codes.splice(i, 1);
+        if (cb.checked) addToDraft(cb.value);
+        else removeFromDraft(cb.value);
         renderSelectedChips();
       };
     });
   };
   
-  // Always-visible summary of everything selected so far, across every filter round
   const renderSelectedChips = () => {
     const box = div.querySelector('#selectedSummary');
-    const selected = draft.branch_codes
-      .map(code => branches.find(b => String(b.branch_code) === String(code)))
+    const selected = draft.branches
+      .map(item => {
+        const b = branches.find(x => String(x.branch_code) === item.code);
+        return b ? {...b, remark: item.remark} : null;
+      })
       .filter(Boolean);
+    const withRemark = selected.filter(b => b.remark && b.remark.trim()).length;
     box.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <strong style="font-size:14px;">เลือกแล้วทั้งหมด: ${draft.branch_codes.length} / ${branches.length} สาขา</strong>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap: wrap; gap: 6px;">
+        <strong style="font-size:14px;">เลือกแล้วทั้งหมด: ${draft.branches.length} / ${branches.length} สาขา</strong>
+        ${withRemark > 0 ? `<span style="font-size:12px; color: var(--text-soft);">มี remark: ${withRemark} สาขา</span>` : ''}
       </div>
-      ${selected.length === 0 ? '<div style="color: var(--text-soft); font-size: 13px;">ยังไม่ได้เลือกสาขา — ติ๊กจากรายการด้านบนได้เลย เลือกหลายรอบผ่าน filter ต่างกันได้ ของเดิมจะไม่หาย</div>' : `
-        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:160px; overflow-y:auto;">
+      ${selected.length === 0 ? '<div style="color: var(--text-soft); font-size: 13px;">ยังไม่ได้เลือกสาขา — ใช้วิธีที่ 1 หรือ 2 ก็ได้ ของเดิมจะไม่หาย</div>' : `
+        <div style="display:flex; flex-direction: column; gap:6px; max-height:240px; overflow-y:auto;">
           ${selected.map(b => `
-            <span style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:999px; padding:4px 6px 4px 10px; font-size:12px;">
-              ${escapeHtml(b.branch_name)} (${escapeHtml(b.branch_code)})
-              <button class="chip-remove" data-code="${escapeHtml(b.branch_code)}" style="background:none; border:none; color:#1e40af; cursor:pointer; font-size:14px; line-height:1; padding:0 2px;">×</button>
-            </span>
+            <div style="display:flex; align-items:flex-start; gap:8px; background:${b.remark ? '#fffbeb' : '#eff6ff'}; border:1px solid ${b.remark ? '#fde68a' : '#bfdbfe'}; border-radius: 8px; padding: 6px 10px; font-size: 13px;">
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight: 500; color:${b.remark ? '#92400e' : '#1e40af'};">${escapeHtml(b.branch_name)} <span style="font-weight:400; opacity:0.75;">(${escapeHtml(b.branch_code)})</span></div>
+                ${b.remark ? `<div style="font-size:12px; color:#78350f; margin-top:2px;">📝 ${escapeHtml(b.remark)}</div>` : ''}
+              </div>
+              <button class="chip-edit" data-code="${escapeHtml(b.branch_code)}" title="แก้ remark" style="background:none; border:none; cursor:pointer; padding:2px 6px; color:${b.remark ? '#92400e' : '#1e40af'}; font-size:13px;">✏️</button>
+              <button class="chip-remove" data-code="${escapeHtml(b.branch_code)}" title="ลบ" style="background:none; border:none; cursor:pointer; padding:2px 6px; color:${b.remark ? '#92400e' : '#1e40af'}; font-size:16px; line-height:1;">×</button>
+            </div>
           `).join('')}
         </div>
       `}
     `;
     box.querySelectorAll('.chip-remove').forEach(btn => {
       btn.onclick = () => {
-        const i = draft.branch_codes.indexOf(btn.dataset.code);
-        if (i !== -1) draft.branch_codes.splice(i, 1);
+        removeFromDraft(btn.dataset.code);
         renderBranches();
         renderSelectedChips();
+      };
+    });
+    box.querySelectorAll('.chip-edit').forEach(btn => {
+      btn.onclick = () => {
+        const item = findInDraft(btn.dataset.code);
+        if (!item) return;
+        const newRemark = prompt('Remark สำหรับสาขา ' + btn.dataset.code + ' (เว้นว่างเพื่อลบ remark)', item.remark || '');
+        if (newRemark !== null) {
+          item.remark = newRemark.trim();
+          renderSelectedChips();
+        }
       };
     });
   };
   
   div.querySelector('#acctFilter').onchange = renderBranches;
   div.querySelector('#regFilter').onchange = renderBranches;
+  div.querySelector('#asFilter').onchange = renderBranches;
   div.querySelector('#qFilter').oninput = renderBranches;
   div.querySelector('#selAllBtn').onclick = () => {
     const pick = div.querySelector('#branchPicker');
@@ -1320,11 +1412,65 @@ async function renderAdminCreate(app) {
     });
   };
   div.querySelector('#clearBtn').onclick = () => {
-    if (draft.branch_codes.length > 0 && !confirm('ล้างสาขาที่เลือกไว้ทั้งหมด ' + draft.branch_codes.length + ' สาขา?')) return;
-    draft.branch_codes = [];
+    if (draft.branches.length > 0 && !confirm('ล้างสาขาที่เลือกไว้ทั้งหมด ' + draft.branches.length + ' สาขา?')) return;
+    draft.branches = [];
     renderBranches();
     renderSelectedChips();
   };
+  
+  div.querySelector('#pasteAddBtn').onclick = () => {
+    const text = div.querySelector('#pasteInput').value.trim();
+    if (!text) { setMsg('error', 'กรุณาวางข้อมูลก่อน'); return; }
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const found = [], notFound = [], updated = [];
+    const seenInBatch = new Set();
+    
+    lines.forEach((line, idx) => {
+      const m = line.match(/^([^,\t]+)[,\t](.*)$/);
+      const code = (m ? m[1] : line).trim().toUpperCase();
+      const remark = m ? m[2].trim() : '';
+      if (!code) return;
+      if (seenInBatch.has(code)) return;
+      seenInBatch.add(code);
+      const b = branches.find(x => String(x.branch_code).toUpperCase() === code);
+      if (!b) { notFound.push({line: idx + 1, code, remark}); return; }
+      if (isInDraft(b.branch_code)) {
+        if (remark) {
+          addToDraft(b.branch_code, remark);
+          updated.push({code: b.branch_code, name: b.branch_name, remark});
+        }
+      } else {
+        addToDraft(b.branch_code, remark);
+        found.push({code: b.branch_code, name: b.branch_name, remark});
+      }
+    });
+    
+    const previewBox = div.querySelector('#pastePreview');
+    previewBox.innerHTML = `
+      ${found.length > 0 ? `
+        <div style="background: #d1fae5; color: #065f46; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 6px;">
+          <strong>✓ เพิ่มใหม่ ${found.length} สาขา</strong>
+        </div>
+      ` : ''}
+      ${updated.length > 0 ? `
+        <div style="background: #dbeafe; color: #1e40af; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 6px;">
+          <strong>↻ อัปเดต remark ${updated.length} สาขา</strong> (สาขามีอยู่แล้ว — แทนที่ remark ด้วยค่าใหม่)
+        </div>
+      ` : ''}
+      ${notFound.length > 0 ? `
+        <div style="background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 6px; font-size: 13px;">
+          <strong>⚠ ไม่พบ ${notFound.length} รายการ</strong> — ข้าม:<br>
+          <span style="font-size: 12px;">${notFound.map(n => 'บรรทัด ' + n.line + ' (' + escapeHtml(n.code) + ')').join(', ')}</span>
+        </div>
+      ` : ''}
+    `;
+    if (found.length > 0 || updated.length > 0) {
+      div.querySelector('#pasteInput').value = '';
+      renderBranches();
+      renderSelectedChips();
+    }
+  };
+  
   renderBranches();
   renderSelectedChips();
   
@@ -1337,14 +1483,21 @@ async function renderAdminCreate(app) {
         setMsg('error', 'คำถามแบบเลือกตอบต้องมีตัวเลือกอย่างน้อย 1 ข้อ: ' + q.text); return;
       }
     }
-    if (draft.branch_codes.length === 0) { setMsg('error', 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา'); return; }
+    if (draft.branches.length === 0) { setMsg('error', 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา'); return; }
     
-    const selectedNames = draft.branch_codes
-      .map(code => { const b = branches.find(x => String(x.branch_code) === String(code)); return b ? b.branch_name + ' (' + b.branch_code + ')' : code; });
+    const withRemark = draft.branches.filter(b => b.remark && b.remark.trim()).length;
+    const selectedDisplay = draft.branches
+      .map(item => {
+        const b = branches.find(x => String(x.branch_code) === item.code);
+        const name = b ? b.branch_name + ' (' + b.branch_code + ')' : item.code;
+        return item.remark ? name + ' 📝' : name;
+      });
     const CAP = 15;
-    const previewList = selectedNames.slice(0, CAP).map(n => '• ' + n).join('\n') +
-      (selectedNames.length > CAP ? '\n... และอีก ' + (selectedNames.length - CAP) + ' สาขา' : '');
-    const confirmMsg = `ยืนยันเผยแพร่ survey "${draft.title}"\n\nไปยัง ${draft.branch_codes.length} สาขา:\n${previewList}\n\nถูกต้องไหม?`;
+    const previewList = selectedDisplay.slice(0, CAP).map(n => '• ' + n).join('\n') +
+      (selectedDisplay.length > CAP ? '\n... และอีก ' + (selectedDisplay.length - CAP) + ' สาขา' : '');
+    const confirmMsg = `ยืนยันเผยแพร่ survey "${draft.title}"\n\nไปยัง ${draft.branches.length} สาขา` +
+      (withRemark > 0 ? ` (${withRemark} สาขามี remark)` : '') +
+      `:\n${previewList}\n\nถูกต้องไหม?`;
     
     if (!confirm(confirmMsg)) return;
     
@@ -1356,7 +1509,7 @@ async function renderAdminCreate(app) {
         description: draft.description,
         deadline: draft.deadline,
         questions: draft.questions,
-        selected_branches: draft.branch_codes
+        selected_branches: draft.branches
       }, {usePost: true});
       setState({loading: false});
       if (res.ok) {
@@ -1460,60 +1613,265 @@ async function renderAdminProgress(app) {
   div.appendChild(content);
   content.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   
+  const expandedAS = state.data.expandedAS || new Set();
+  state.data.expandedAS = expandedAS;
+  
   const loadProgress = async () => {
-    try {
-      const res = await api('admin_get_progress', {token: state.token, survey_id: state.data.survey_id});
-      if (!res.ok) {
-        if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
-        content.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
-        return;
+    let res;
+    try { res = await api('admin_get_progress', {token: state.token, survey_id: state.data.survey_id}); }
+    catch (e) { content.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+    if (!res.ok) {
+      if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+      content.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+      return;
+    }
+    
+    const pendingRows = res.rows.filter(r => r.status === 'pending');
+    const submittedRows = res.rows.filter(r => r.status === 'submitted');
+    
+    // Group by AS code, then by region
+    const asGroups = {};
+    pendingRows.forEach(r => {
+      const key = r.as_code || '(ไม่มี AS)';
+      if (!asGroups[key]) {
+        asGroups[key] = {
+          as_code: r.as_code, as_name: r.as_name, as_phone: r.as_phone,
+          region: r.region, pending: [], totalForAS: 0
+        };
       }
-      content.innerHTML = `
-        <div class="card">
-          <h2>${escapeHtml(res.survey.title)}</h2>
-          <div class="stat-grid">
-            <div class="stat"><div class="num">${res.summary.total}</div><div class="label">ทั้งหมด</div></div>
-            <div class="stat"><div class="num" style="color: var(--success);">${res.summary.submitted}</div><div class="label">ส่งแล้ว</div></div>
-            <div class="stat"><div class="num" style="color: var(--pending);">${res.summary.pending}</div><div class="label">ค้าง</div></div>
-          </div>
-          <div>ความคืบหน้า ${res.summary.percent}%</div>
-          <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
-          
-          <div class="gap-8 mt-12">
-            <button class="btn btn-sm" id="refreshBtn">🔄 รีเฟรช</button>
-            <button class="btn btn-sm btn-secondary" id="exportBtn">📥 Export Excel (CSV)</button>
-            <button class="btn btn-sm btn-danger" id="deleteBtn">🗑️ ลบ Survey + คำตอบ</button>
-          </div>
+      asGroups[key].pending.push(r);
+    });
+    // Count total branches per AS (pending + submitted) for "X / Y" display
+    res.rows.forEach(r => {
+      const key = r.as_code || '(ไม่มี AS)';
+      if (asGroups[key]) asGroups[key].totalForAS++;
+    });
+    
+    // Group AS by region
+    const regionGroups = {};
+    const regionOrder = [];
+    Object.keys(asGroups).forEach(asKey => {
+      const g = asGroups[asKey];
+      const reg = g.region || '(ไม่มี Region)';
+      if (!regionGroups[reg]) { regionGroups[reg] = []; regionOrder.push(reg); }
+      regionGroups[reg].push(g);
+    });
+    regionOrder.sort();
+    
+    // Count AS who are 100% done
+    const completedAsGroups = {};
+    submittedRows.forEach(r => {
+      if (asGroups[r.as_code]) return; // skip AS still pending
+      const key = r.as_code || '(ไม่มี AS)';
+      if (!completedAsGroups[key]) {
+        completedAsGroups[key] = {as_code: r.as_code, as_name: r.as_name, count: 0};
+      }
+      completedAsGroups[key].count++;
+    });
+    const completedAsCount = Object.keys(completedAsGroups).length;
+    const pendingAsCount = Object.keys(asGroups).length;
+    const regionsWithPending = regionOrder.length;
+    
+    // Build the content
+    const html = `
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <h2 style="margin: 0;">${escapeHtml(res.survey.title)}</h2>
+          <span style="font-size: 22px; font-weight: 600;">${res.summary.submitted}<span style="font-size: 14px; color: var(--text-soft); font-weight: 400;"> / ${res.summary.total}</span></span>
+        </div>
+        ${res.survey.deadline ? `<div style="font-size: 13px; color: var(--text-soft); margin-top: 4px;">กำหนดส่ง ${escapeHtml(new Date(res.survey.deadline).toLocaleDateString('th-TH'))}</div>` : ''}
+        
+        <div class="stat-grid" style="margin-top: 14px;">
+          <div class="stat"><div class="num" style="color: var(--success);">${res.summary.submitted}</div><div class="label">เสร็จแล้ว</div></div>
+          <div class="stat"><div class="num" style="color: var(--pending);">${res.summary.pending}</div><div class="label">ค้าง</div></div>
+          <div class="stat"><div class="num">${pendingAsCount}</div><div class="label">AS ที่ค้าง</div></div>
+          <div class="stat"><div class="num">${regionsWithPending}</div><div class="label">Region ที่ค้าง</div></div>
         </div>
         
-        <div class="card">
-          <h3>รายละเอียดสาขา</h3>
-          <table>
-            <thead><tr><th>Account</th><th>Region</th><th>AS</th><th>สาขา</th><th>สถานะ</th><th>เวลาส่ง</th></tr></thead>
-            <tbody>
-              ${res.rows.map(r => `
-                <tr>
-                  <td>${escapeHtml(r.account)}</td>
-                  <td>${escapeHtml(r.region)}</td>
-                  <td>${escapeHtml(r.as_code)}</td>
-                  <td>${escapeHtml(r.branch_name)} <span style="color: var(--text-soft); font-size: 12px;">(${escapeHtml(r.branch_code)})</span></td>
-                  <td><span class="badge badge-${r.status}">${r.status === 'pending' ? 'ค้าง' : 'ส่งแล้ว'}</span></td>
-                  <td style="font-size: 12px; color: var(--text-soft);">${r.submitted_at ? formatDate(r.submitted_at) : '-'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+        <div>ความคืบหน้า ${res.summary.percent}%</div>
+        <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
+        
+        <div class="gap-8 mt-12">
+          <button class="btn btn-sm" id="refreshBtn">🔄 รีเฟรช</button>
+          <button class="btn btn-sm btn-secondary" id="exportBtn">📥 Export Excel (CSV)</button>
+          <button class="btn btn-sm btn-danger" id="deleteBtn">🗑️ ลบ Survey + คำตอบ</button>
         </div>
-      `;
-      content.querySelector('#refreshBtn').onclick = loadProgress;
-      content.querySelector('#exportBtn').onclick = exportSurvey;
-      content.querySelector('#deleteBtn').onclick = deleteSurvey;
-    } catch (e) {
-      content.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`;
+      </div>
+      
+      ${pendingAsCount > 0 ? `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <h2 style="margin: 0;">AS ที่ยังไม่เสร็จ (${pendingAsCount} คน)</h2>
+            <div class="gap-8">
+              <button class="btn btn-sm" id="copyCodesBtn" title="Copy รหัส AS ที่ยังค้าง คั่นด้วย comma">📋 Copy AS codes (${pendingAsCount})</button>
+              <button class="btn btn-sm btn-secondary" id="copyMessageBtn" title="Copy ข้อความสำเร็จรูปพร้อมรายชื่อสาขาที่ค้าง">💬 Copy ข้อความติดตาม</button>
+              <button class="btn btn-sm btn-secondary" id="copyPhonesBtn" title="Copy เบอร์โทรของ AS ที่ค้าง">📞 Copy เบอร์โทร</button>
+            </div>
+          </div>
+          
+          ${regionOrder.map(reg => {
+            const ases = regionGroups[reg];
+            return `
+              <div class="region-section" style="margin-bottom: 14px;">
+                <div style="font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.6px; margin: 10px 0 8px;">
+                  ${escapeHtml(reg)} · ${ases.length} คนค้าง
+                </div>
+                ${ases.map(g => {
+                  const isExpanded = expandedAS.has(g.as_code);
+                  return `
+                    <div class="as-card" style="border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;">
+                      <div class="as-head" data-as="${escapeHtml(g.as_code)}" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="color: var(--text-soft); font-size: 12px; width: 14px; display: inline-block;">${isExpanded ? '▼' : '▶'}</span>
+                          <div>
+                            <div style="font-weight: 500;">${escapeHtml(g.as_code)}${g.as_name ? ' · ' + escapeHtml(g.as_name) : ''}</div>
+                            ${g.as_phone ? `<div style="font-size: 12px; color: var(--text-soft);">โทร ${escapeHtml(g.as_phone)}</div>` : ''}
+                          </div>
+                        </div>
+                        <span class="badge badge-pending">ค้าง ${g.pending.length} / ${g.totalForAS} สาขา</span>
+                      </div>
+                      ${isExpanded ? `
+                        <div style="margin-top: 12px; padding-left: 26px;">
+                          ${g.pending.map(b => `
+                            <div style="font-size: 13px; padding: 3px 0;">
+                              <span style="color: var(--pending); margin-right: 6px;">○</span>${escapeHtml(b.branch_code)} · ${escapeHtml(b.branch_name)}
+                              ${b.remark ? `<div style="font-size: 12px; color: #92400e; padding-left: 16px; padding-top: 2px;">📝 ${escapeHtml(b.remark)}</div>` : ''}
+                            </div>
+                          `).join('')}
+                          <div class="gap-8" style="margin-top: 10px;">
+                            <button class="btn btn-sm btn-secondary copy-as-msg" data-as="${escapeHtml(g.as_code)}">📋 Copy ข้อความถึง ${escapeHtml(g.as_code)}</button>
+                            ${g.as_phone ? `<button class="btn btn-sm btn-secondary copy-as-phone" data-phone="${escapeHtml(g.as_phone)}">📞 Copy เบอร์</button>` : ''}
+                          </div>
+                        </div>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
+      
+      ${completedAsCount > 0 ? `
+        <div class="card">
+          <div class="completed-head" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <span style="color: var(--text-soft); font-size: 12px;" id="completedChev">▶</span>
+            <h2 style="margin: 0; flex: 1;">AS ที่เสร็จแล้ว (${completedAsCount} คน · ${submittedRows.length} สาขา)</h2>
+            <span style="color: var(--success);">✓</span>
+          </div>
+          <div id="completedList" style="display: none; margin-top: 12px;">
+            ${Object.values(completedAsGroups).map(g => `
+              <div style="font-size: 13px; padding: 4px 0; display: flex; justify-content: space-between;">
+                <span>${escapeHtml(g.as_code)}${g.as_name ? ' · ' + escapeHtml(g.as_name) : ''}</span>
+                <span style="color: var(--success);">${g.count} สาขา ✓</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      
+      ${res.rows.length === 0 ? `
+        <div class="card empty">ยังไม่มีสาขาใน survey นี้</div>
+      ` : ''}
+    `;
+    
+    content.innerHTML = html;
+    
+    content.querySelector('#refreshBtn').onclick = loadProgress;
+    content.querySelector('#exportBtn').onclick = exportSurvey;
+    content.querySelector('#deleteBtn').onclick = deleteSurvey;
+    
+    // Expand/collapse AS cards
+    content.querySelectorAll('.as-head').forEach(head => {
+      head.onclick = () => {
+        const asCode = head.dataset.as;
+        if (expandedAS.has(asCode)) expandedAS.delete(asCode);
+        else expandedAS.add(asCode);
+        loadProgress();
+      };
+    });
+    
+    // Completed section toggle
+    const completedHead = content.querySelector('.completed-head');
+    if (completedHead) {
+      completedHead.onclick = () => {
+        const list = content.querySelector('#completedList');
+        const chev = content.querySelector('#completedChev');
+        if (list.style.display === 'none') { list.style.display = 'block'; chev.textContent = '▼'; }
+        else { list.style.display = 'none'; chev.textContent = '▶'; }
+      };
     }
+    
+    // Top-level copy buttons
+    const copyCodes = content.querySelector('#copyCodesBtn');
+    if (copyCodes) copyCodes.onclick = () => {
+      const codes = Object.keys(asGroups).filter(c => c !== '(ไม่มี AS)').join(', ');
+      copyText(codes, 'รหัส AS ที่ค้าง');
+    };
+    const copyPhones = content.querySelector('#copyPhonesBtn');
+    if (copyPhones) copyPhones.onclick = () => {
+      const phones = Object.values(asGroups).map(g => g.as_phone).filter(Boolean).join(', ');
+      copyText(phones, 'เบอร์โทร');
+    };
+    const copyMsg = content.querySelector('#copyMessageBtn');
+    if (copyMsg) copyMsg.onclick = () => {
+      const parts = [];
+      parts.push(`ขอติดตาม Survey "${res.survey.title}" ครับ`);
+      parts.push('━━━━━━━━━━━━━━');
+      regionOrder.forEach(reg => {
+        regionGroups[reg].forEach(g => {
+          parts.push(`${g.as_code}${g.as_name ? ' · ' + g.as_name : ''} ค้าง ${g.pending.length} สาขา:`);
+          g.pending.forEach(b => parts.push(`- ${b.branch_code} ${b.branch_name}`));
+          parts.push('');
+        });
+      });
+      copyText(parts.join('\n'), 'ข้อความติดตาม');
+    };
+    
+    // Per-AS copy buttons (only present in expanded cards)
+    content.querySelectorAll('.copy-as-msg').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const asCode = btn.dataset.as;
+        const g = asGroups[asCode];
+        if (!g) return;
+        const parts = [];
+        parts.push(`${asCode}${g.as_name ? ' · ' + g.as_name : ''} ค้าง ${g.pending.length} สาขา สำหรับ Survey "${res.survey.title}":`);
+        g.pending.forEach(b => parts.push(`- ${b.branch_code} ${b.branch_name}`));
+        copyText(parts.join('\n'), `ข้อความถึง ${asCode}`);
+      };
+    });
+    content.querySelectorAll('.copy-as-phone').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        copyText(btn.dataset.phone, 'เบอร์');
+      };
+    });
   };
   
   loadProgress();
+}
+
+// Generic copy-to-clipboard helper with fallback for older browsers
+function copyText(text, label) {
+  if (!text) { setMsg('error', 'ไม่มีข้อมูลให้ copy'); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => setMsg('success', 'Copy ' + (label || 'ข้อความ') + ' แล้ว'),
+      () => fallbackCopy(text, label)
+    );
+  } else {
+    fallbackCopy(text, label);
+  }
+}
+function fallbackCopy(text, label) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); setMsg('success', 'Copy ' + (label || 'ข้อความ') + ' แล้ว'); }
+  catch (e) { setMsg('error', 'Copy ไม่ได้ — กรุณาคัดลอกด้วยมือ'); }
+  document.body.removeChild(ta);
 }
 
 async function exportSurvey() {
