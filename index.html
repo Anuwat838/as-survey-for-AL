@@ -313,7 +313,32 @@ function makeSeedDB() {
         q4: {value: 'สินค้าครบ ป้ายราคาชัดเจน', photos: []}
       }),
       submitted_at: new Date(Date.now() - 2*3600*1000).toISOString()
-    }]
+    }],
+    linkTasks: [
+      {
+        task_id: 'L_DEMO1',
+        title: 'แบบสอบถามความพึงพอใจพนักงาน Q3 (ตัวอย่าง)',
+        description: 'กรอกภายในสัปดาห์นี้ ใช้เวลาประมาณ 5 นาที',
+        link_url: 'https://forms.gle/demo-example',
+        assigned_as_codes_json: JSON.stringify(['AS01']),
+        deadline: new Date(Date.now() + 7*24*3600*1000).toISOString().slice(0,10),
+        status: 'published',
+        created_at: new Date().toISOString()
+      },
+      {
+        task_id: 'L_DEMO2',
+        title: 'อัปเดตข้อมูลติดต่อประจำปี (ตัวอย่าง)',
+        description: '',
+        link_url: 'https://forms.gle/demo-example2',
+        assigned_as_codes_json: JSON.stringify(['AS01']),
+        deadline: '',
+        status: 'published',
+        created_at: new Date(Date.now() - 5*24*3600*1000).toISOString()
+      }
+    ],
+    linkTaskDone: [
+      {task_id: 'L_DEMO2', as_code: 'AS01', done_at: new Date(Date.now() - 24*3600*1000).toISOString()}
+    ]
   };
 }
 
@@ -372,7 +397,92 @@ function mockApi(action, p) {
         });
       });
       tasks.sort((a,b) => a.status !== b.status ? (a.status === 'pending' ? -1 : 1) : 0);
-      return ok({tasks});
+      // Link tasks for AS01
+      const myLinkTasks = (mockDB.linkTasks || []).filter(t => {
+        if (t.status !== 'published') return false;
+        const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
+        return assigned.indexOf('AS01') !== -1;
+      }).map(t => {
+        const doneRow = (mockDB.linkTaskDone || []).find(d => d.task_id === t.task_id && d.as_code === 'AS01');
+        return {
+          task_id: t.task_id, title: t.title, description: t.description,
+          link_url: t.link_url, deadline: t.deadline || null,
+          done: !!doneRow, done_at: doneRow ? doneRow.done_at : null
+        };
+      });
+      myLinkTasks.sort((a,b) => a.done !== b.done ? (a.done ? 1 : -1) : 0);
+      return ok({tasks, link_tasks: myLinkTasks});
+    }
+    
+    case 'link_task_mark_done': {
+      const t = (mockDB.linkTasks || []).find(t => t.task_id === p.task_id);
+      if (!t) return fail('ไม่พบงานนี้ (demo)');
+      const exists = mockDB.linkTaskDone.find(d => d.task_id === p.task_id && d.as_code === 'AS01');
+      if (!exists) mockDB.linkTaskDone.push({task_id: p.task_id, as_code: 'AS01', done_at: new Date().toISOString()});
+      return ok({message: 'บันทึกสถานะเสร็จแล้ว (demo)'});
+    }
+    
+    case 'link_task_unmark_done': {
+      const before = mockDB.linkTaskDone.length;
+      mockDB.linkTaskDone = mockDB.linkTaskDone.filter(d => !(d.task_id === p.task_id && d.as_code === 'AS01'));
+      if (mockDB.linkTaskDone.length === before) return fail('ไม่พบสถานะเสร็จของงานนี้ (demo)');
+      return ok({message: 'ยกเลิกสถานะเสร็จแล้ว (demo)'});
+    }
+    
+    case 'admin_create_link_task': {
+      if (!p.title) return fail('กรุณากรอกหัวข้อ');
+      if (!p.link_url || !/^https:\/\/.+/.test(p.link_url)) return fail('ลิงก์ต้องขึ้นต้นด้วย https://');
+      const asCodes = typeof p.assigned_as_codes === 'string' ? JSON.parse(p.assigned_as_codes) : p.assigned_as_codes;
+      if (!asCodes || asCodes.length === 0) return fail('กรุณาเลือก AS อย่างน้อย 1 คน');
+      const id = mockGenId('L');
+      mockDB.linkTasks.push({
+        task_id: id, title: p.title, description: p.description || '',
+        link_url: p.link_url, assigned_as_codes_json: JSON.stringify(asCodes.map(c => String(c).toUpperCase())),
+        deadline: p.deadline || '', status: 'published', created_at: new Date().toISOString()
+      });
+      return ok({task_id: id, message: 'สร้าง Link Task สำเร็จ (demo)'});
+    }
+    
+    case 'admin_list_link_tasks': {
+      const result = (mockDB.linkTasks || []).map(t => {
+        const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
+        const doneCount = (mockDB.linkTaskDone || []).filter(d => d.task_id === t.task_id).length;
+        return {
+          task_id: t.task_id, title: t.title, description: t.description,
+          link_url: t.link_url, deadline: t.deadline, status: t.status, created_at: t.created_at,
+          assigned_count: assigned.length, done_count: doneCount
+        };
+      }).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)));
+      return ok({link_tasks: result});
+    }
+    
+    case 'admin_get_link_task_progress': {
+      const t = (mockDB.linkTasks || []).find(t => t.task_id === p.task_id);
+      if (!t) return fail('ไม่พบงานนี้ (demo)');
+      const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
+      const rows = assigned.map(code => {
+        const u = mockDB.users.find(u => u.login_code === code);
+        const firstBranch = mockDB.branches.find(b => b.assigned_as_code === code);
+        const doneRow = (mockDB.linkTaskDone || []).find(d => d.task_id === p.task_id && d.as_code === code);
+        return {
+          as_code: code, as_name: u?u.name:'', as_phone: u?(u.phone||''):'',
+          region: firstBranch?firstBranch.region:'',
+          done: !!doneRow, done_at: doneRow?doneRow.done_at:''
+        };
+      });
+      rows.sort((a,b) => a.done !== b.done ? (a.done?1:-1) : String(a.as_code).localeCompare(String(b.as_code)));
+      const summary = {total: rows.length, done: rows.filter(r=>r.done).length, pending: rows.filter(r=>!r.done).length};
+      summary.percent = summary.total ? Math.round(summary.done/summary.total*100) : 0;
+      return ok({task: {task_id: t.task_id, title: t.title, description: t.description, link_url: t.link_url, deadline: t.deadline, status: t.status}, summary, rows});
+    }
+    
+    case 'admin_delete_link_task': {
+      if (p.confirm !== 'DELETE') return fail('ต้องส่ง confirm=DELETE');
+      const beforeD = mockDB.linkTaskDone.length;
+      mockDB.linkTaskDone = mockDB.linkTaskDone.filter(d => d.task_id !== p.task_id);
+      const beforeT = mockDB.linkTasks.length;
+      mockDB.linkTasks = mockDB.linkTasks.filter(t => t.task_id !== p.task_id);
+      return ok({message: 'ลบสำเร็จ (demo): ' + (beforeT-mockDB.linkTasks.length) + ' task, ' + (beforeD-mockDB.linkTaskDone.length) + ' สถานะเสร็จ'});
     }
     
     case 'get_survey': {
@@ -651,6 +761,8 @@ function render() {
     admin_home: renderAdminHome,
     admin_create: renderAdminCreate,
     admin_progress: renderAdminProgress,
+    admin_linktasks: renderAdminLinkTasks,
+    admin_linktask_progress: renderAdminLinkTaskProgress,
     admin_users: renderAdminUsers,
     admin_settings: renderAdminSettings
   };
@@ -756,29 +868,112 @@ async function renderAsHome(app) {
   
   const surveyGroups = groupTasksBySurvey(res.tasks);
   const completedCount = surveyGroups.filter(isGroupComplete).length;
+  const linkTasks = res.link_tasks || [];
+  const linkDone = linkTasks.filter(t => t.done).length;
+  const totalJobs = surveyGroups.length + linkTasks.length;
+  const totalDone = completedCount + linkDone;
   
   div.innerHTML = `
     <div class="stat-grid">
-      <div class="stat"><div class="num">${surveyGroups.length}</div><div class="label">Survey ทั้งหมด</div></div>
-      <div class="stat"><div class="num" style="color: var(--pending);">${surveyGroups.length - completedCount}</div><div class="label">ยังไม่เสร็จ</div></div>
-      <div class="stat"><div class="num" style="color: var(--success);">${completedCount}</div><div class="label">เสร็จแล้ว</div></div>
+      <div class="stat"><div class="num">${totalJobs}</div><div class="label">งานทั้งหมด</div></div>
+      <div class="stat"><div class="num" style="color: var(--pending);">${totalJobs - totalDone}</div><div class="label">ยังไม่เสร็จ</div></div>
+      <div class="stat"><div class="num" style="color: var(--success);">${totalDone}</div><div class="label">เสร็จแล้ว</div></div>
     </div>
     
-    ${surveyGroups.length === 0 ? `
-      <div class="card empty">ยังไม่มี survey สำหรับสาขาที่คุณดูแล</div>
-    ` : `
-      <div class="card">
-        <h2>Survey ทั้งหมด (${surveyGroups.length})</h2>
+    ${surveyGroups.length > 0 ? `
+      <div class="card" style="border-left: 4px solid var(--primary);">
+        <h2>📋 Survey สาขา (${surveyGroups.length})</h2>
         <div class="task-list">
           ${surveyGroups.map((g, i) => surveyGroupCardHtml(g, i)).join('')}
         </div>
       </div>
-    `}
+    ` : ''}
+    
+    ${linkTasks.length > 0 ? `
+      <div class="card" style="border-left: 4px solid #7c3aed;">
+        <h2>🔗 งานลิงก์ภายนอก (${linkTasks.length})</h2>
+        <div class="task-list">
+          ${linkTasks.map((t, i) => linkTaskCardHtml(t, i)).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${totalJobs === 0 ? `
+      <div class="card empty">ยังไม่มีงานสำหรับคุณ</div>
+    ` : ''}
   `;
   
   div.querySelectorAll('[data-survey-idx]').forEach(el => {
     el.onclick = () => openSurveyBranches(surveyGroups[parseInt(el.dataset.surveyIdx)]);
   });
+  
+  // Link task actions
+  div.querySelectorAll('.lt-open').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      window.open(btn.dataset.url, '_blank', 'noopener');
+    };
+  });
+  div.querySelectorAll('.lt-done').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const t = linkTasks[parseInt(btn.dataset.idx)];
+      if (!confirm('ยืนยันว่าทำ "' + t.title + '" เสร็จแล้ว?')) return;
+      setState({loading: true});
+      try {
+        const r = await api('link_task_mark_done', {token: state.token, task_id: t.task_id});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'as_home'}); }
+        else setMsg('error', r.error);
+      } catch (err) { setState({loading: false}); setMsg('error', err.message); }
+    };
+  });
+  div.querySelectorAll('.lt-undo').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const t = linkTasks[parseInt(btn.dataset.idx)];
+      if (!confirm('ยกเลิกสถานะเสร็จของ "' + t.title + '"?')) return;
+      setState({loading: true});
+      try {
+        const r = await api('link_task_unmark_done', {token: state.token, task_id: t.task_id});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'as_home'}); }
+        else setMsg('error', r.error);
+      } catch (err) { setState({loading: false}); setMsg('error', err.message); }
+    };
+  });
+}
+
+function linkTaskCardHtml(t, idx) {
+  const deadlineTxt = t.deadline ? ' · กำหนดส่ง ' + new Date(t.deadline).toLocaleDateString('th-TH') : '';
+  if (t.done) {
+    return `
+      <div class="task" style="border-color: #a7f3d0; background: #f0fdf4; cursor: default;">
+        <div class="top">
+          <div class="branch">🔗 ${escapeHtml(t.title)}</div>
+          <span class="badge badge-submitted" style="font-weight:600;">✓ เสร็จแล้ว</span>
+        </div>
+        <div class="survey">ทำเสร็จเมื่อ ${t.done_at ? formatDate(t.done_at) : '-'}</div>
+        <div class="gap-8" style="margin-top: 10px;">
+          <button class="btn btn-sm btn-secondary lt-open" data-url="${escapeHtml(t.link_url)}">🔗 เปิดลิงก์อีกครั้ง</button>
+          <button class="btn btn-sm btn-secondary lt-undo" data-idx="${idx}" style="color: var(--text-soft);">↩ ยกเลิกสถานะเสร็จ</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="task" style="border-color: #ddd6fe; background: #f5f3ff; cursor: default;">
+      <div class="top">
+        <div class="branch">🔗 ${escapeHtml(t.title)}</div>
+        <span class="badge" style="background: #ede9fe; color: #6d28d9;">ยังไม่ทำ</span>
+      </div>
+      <div class="survey">${escapeHtml(t.description || '')}${deadlineTxt}</div>
+      <div class="gap-8" style="margin-top: 10px;">
+        <button class="btn btn-sm lt-open" data-url="${escapeHtml(t.link_url)}" style="background: #7c3aed;">🔗 เปิดลิงก์ทำงาน</button>
+        <button class="btn btn-sm btn-secondary lt-done" data-idx="${idx}">✓ ทำเสร็จแล้ว</button>
+      </div>
+    </div>
+  `;
 }
 
 function groupTasksBySurvey(tasks) {
@@ -1167,6 +1362,7 @@ function adminTabs(active) {
   const tabs = [
     {key: 'admin_home', label: 'รายการ Survey'},
     {key: 'admin_create', label: '+ สร้าง Survey'},
+    {key: 'admin_linktasks', label: '🔗 Link Task'},
     {key: 'admin_users', label: 'จัดการ User'},
     {key: 'admin_settings', label: 'ตั้งค่า'}
   ];
@@ -1935,6 +2131,276 @@ async function deleteSurvey() {
 // ============================================================
 // ADMIN USERS — list, add one, bulk add from pasted Excel data
 // ============================================================
+
+// ============================================================
+// ADMIN LINK TASKS — create, list, progress
+// ============================================================
+
+async function renderAdminLinkTasks(app) {
+  app.appendChild(adminTabs('admin_linktasks'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  // Load link tasks and users in parallel
+  let tasksRes, usersRes;
+  try {
+    [tasksRes, usersRes] = await Promise.all([
+      api('admin_list_link_tasks', {token: state.token}),
+      api('admin_get_users', {token: state.token})
+    ]);
+  } catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+  
+  if (!tasksRes.ok) {
+    if (tasksRes.error && tasksRes.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(tasksRes.error)}</div>`;
+    return;
+  }
+  const asUsers = (usersRes.ok ? usersRes.users : []).filter(u => u.role === 'as' && u.status === 'active');
+  const tasks = tasksRes.link_tasks;
+  
+  const selectedAS = new Set();
+  
+  div.innerHTML = `
+    <div class="card" style="border-left: 4px solid #7c3aed;">
+      <h2>🔗 Link Task ทั้งหมด (${tasks.length})</h2>
+      ${tasks.length === 0 ? '<div class="empty">ยังไม่มี Link Task — สร้างด้านล่างได้เลย</div>' : `
+        <table>
+          <thead><tr><th>หัวข้อ</th><th>มอบหมาย</th><th>เสร็จ</th><th></th></tr></thead>
+          <tbody>
+            ${tasks.map(t => `
+              <tr>
+                <td>
+                  <div style="font-weight: 500;">🔗 ${escapeHtml(t.title)}</div>
+                  <div style="font-size: 12px; color: var(--text-soft);">${formatDate(t.created_at)}${t.deadline ? ' · กำหนดส่ง ' + escapeHtml(String(t.deadline)) : ''}</div>
+                </td>
+                <td>${t.assigned_count} คน</td>
+                <td><span class="badge badge-${t.done_count >= t.assigned_count ? 'submitted' : 'pending'}">${t.done_count}/${t.assigned_count}</span></td>
+                <td><button class="btn btn-sm lt-view" data-id="${escapeHtml(t.task_id)}" style="background: #7c3aed;">ดู Progress</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+    
+    <div class="card">
+      <h2>+ สร้าง Link Task ใหม่</h2>
+      <div class="form-row">
+        <label>หัวข้อ <span class="required">*</span></label>
+        <input type="text" id="ltTitle" placeholder="เช่น แบบสอบถามความพึงพอใจพนักงาน Q3" />
+      </div>
+      <div class="form-row">
+        <label>คำอธิบาย (ไม่บังคับ)</label>
+        <textarea id="ltDesc" rows="2" placeholder="เช่น กรอกภายในสัปดาห์นี้ ใช้เวลา 5 นาที"></textarea>
+      </div>
+      <div class="form-row">
+        <label>ลิงก์ (Google Form / Sheet ที่เปิดสาธารณะแล้ว) <span class="required">*</span></label>
+        <input type="text" id="ltUrl" placeholder="https://forms.gle/..." />
+        <div style="font-size: 12px; color: var(--text-soft); margin-top: 4px;">ต้องขึ้นต้นด้วย https:// — ทดสอบเปิดลิงก์เองก่อนเผยแพร่</div>
+      </div>
+      <div class="form-row">
+        <label>กำหนดส่ง (deadline)</label>
+        <input type="date" id="ltDeadline" />
+      </div>
+      <div class="form-row">
+        <label>เลือก AS ที่ต้องทำ (<span id="ltAsCount">0</span> / ${asUsers.length} คน)</label>
+        <div class="gap-8 mb-12">
+          <button type="button" class="btn btn-sm btn-secondary" id="ltSelAll">เลือกทั้งหมด</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="ltClear">ล้าง</button>
+          <input type="text" id="ltAsSearch" placeholder="ค้นหา AS..." style="flex: 1; min-width: 120px; padding: 6px 10px; font-size: 13px;" />
+        </div>
+        <div class="branch-picker" id="ltAsPicker" style="max-height: 220px;"></div>
+      </div>
+      <button class="btn btn-success btn-block" id="ltPublish">เผยแพร่ Link Task</button>
+    </div>
+  `;
+  
+  div.querySelectorAll('.lt-view').forEach(b => {
+    b.onclick = () => setState({screen: 'admin_linktask_progress', data: {task_id: b.dataset.id}});
+  });
+  
+  const renderAsPicker = () => {
+    const q = div.querySelector('#ltAsSearch').value.toLowerCase();
+    const filtered = asUsers.filter(u => 
+      !q || String(u.login_code).toLowerCase().includes(q) || String(u.name).toLowerCase().includes(q)
+    );
+    const picker = div.querySelector('#ltAsPicker');
+    picker.innerHTML = filtered.map(u => `
+      <label>
+        <input type="checkbox" value="${escapeHtml(u.login_code)}" ${selectedAS.has(u.login_code) ? 'checked' : ''} />
+        <span><strong>${escapeHtml(u.login_code)}</strong> · ${escapeHtml(u.name)}</span>
+      </label>
+    `).join('') || '<div style="text-align:center; color: var(--text-soft); padding: 12px; font-size: 13px;">ไม่พบ AS</div>';
+    picker.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.onchange = () => {
+        if (cb.checked) selectedAS.add(cb.value);
+        else selectedAS.delete(cb.value);
+        div.querySelector('#ltAsCount').textContent = selectedAS.size;
+      };
+    });
+  };
+  div.querySelector('#ltAsSearch').oninput = renderAsPicker;
+  div.querySelector('#ltSelAll').onclick = () => {
+    div.querySelectorAll('#ltAsPicker input[type=checkbox]').forEach(cb => {
+      if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+    });
+  };
+  div.querySelector('#ltClear').onclick = () => {
+    selectedAS.clear();
+    div.querySelector('#ltAsCount').textContent = '0';
+    renderAsPicker();
+  };
+  renderAsPicker();
+  
+  div.querySelector('#ltPublish').onclick = async () => {
+    const title = div.querySelector('#ltTitle').value.trim();
+    const description = div.querySelector('#ltDesc').value.trim();
+    const linkUrl = div.querySelector('#ltUrl').value.trim();
+    const deadline = div.querySelector('#ltDeadline').value;
+    
+    if (!title) { setMsg('error', 'กรุณากรอกหัวข้อ'); return; }
+    if (!linkUrl) { setMsg('error', 'กรุณาวางลิงก์'); return; }
+    if (!/^https:\/\/.+/.test(linkUrl)) { setMsg('error', 'ลิงก์ต้องขึ้นต้นด้วย https://'); return; }
+    if (selectedAS.size === 0) { setMsg('error', 'กรุณาเลือก AS อย่างน้อย 1 คน'); return; }
+    
+    if (!confirm(`เผยแพร่ Link Task "${title}" ให้ ${selectedAS.size} คน?`)) return;
+    
+    setState({loading: true});
+    try {
+      const r = await api('admin_create_link_task', {
+        token: state.token, title, description,
+        link_url: linkUrl, deadline,
+        assigned_as_codes: [...selectedAS]
+      }, {usePost: true});
+      setState({loading: false});
+      if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_linktasks', data: {}}); }
+      else setMsg('error', r.error);
+    } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+  };
+}
+
+async function renderAdminLinkTaskProgress(app) {
+  app.appendChild(adminTabs('admin_linktasks'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-secondary btn-sm mb-12';
+  backBtn.textContent = '← กลับรายการ Link Task';
+  backBtn.onclick = () => setState({screen: 'admin_linktasks', data: {}});
+  div.appendChild(backBtn);
+  
+  const content = document.createElement('div');
+  div.appendChild(content);
+  content.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  const loadProgress = async () => {
+    let res;
+    try { res = await api('admin_get_link_task_progress', {token: state.token, task_id: state.data.task_id}); }
+    catch (e) { content.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+    if (!res.ok) {
+      if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+      content.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+      return;
+    }
+    
+    const pending = res.rows.filter(r => !r.done);
+    const done = res.rows.filter(r => r.done);
+    
+    content.innerHTML = `
+      <div class="card" style="border-left: 4px solid #7c3aed;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <h2 style="margin: 0;">🔗 ${escapeHtml(res.task.title)}</h2>
+          <span style="font-size: 20px; font-weight: 600;">${res.summary.done}<span style="font-size: 13px; color: var(--text-soft); font-weight: 400;"> / ${res.summary.total} คน</span></span>
+        </div>
+        <div style="font-size: 13px; color: var(--text-soft); margin: 4px 0 8px;">
+          ${res.task.deadline ? 'กำหนดส่ง ' + escapeHtml(String(res.task.deadline)) + ' · ' : ''}
+          <a href="${escapeHtml(res.task.link_url)}" target="_blank" rel="noopener" style="color: #7c3aed;">${escapeHtml(res.task.link_url)}</a>
+        </div>
+        <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
+        
+        <div class="gap-8 mt-12">
+          <button class="btn btn-sm" id="ltpRefresh">🔄 รีเฟรช</button>
+          ${pending.length > 0 ? `
+            <button class="btn btn-sm btn-secondary" id="ltpCopyCodes">📋 Copy AS ที่ยังไม่ทำ (${pending.length})</button>
+            <button class="btn btn-sm btn-secondary" id="ltpCopyMsg">💬 Copy ข้อความติดตาม</button>
+          ` : ''}
+          <button class="btn btn-sm btn-danger" id="ltpDelete">🗑️ ลบ Task</button>
+        </div>
+      </div>
+      
+      ${pending.length > 0 ? `
+        <div class="card">
+          <h3 style="margin-top: 0;">ยังไม่ทำ (${pending.length})</h3>
+          <table>
+            <thead><tr><th>AS Code</th><th>ชื่อ</th><th>เบอร์</th></tr></thead>
+            <tbody>
+              ${pending.map(r => `
+                <tr>
+                  <td>${escapeHtml(r.as_code)}</td>
+                  <td>${escapeHtml(r.as_name || '-')}</td>
+                  <td style="font-size: 13px; color: var(--text-soft);">${escapeHtml(r.as_phone || '-')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+      
+      ${done.length > 0 ? `
+        <div class="card">
+          <h3 style="margin-top: 0;">เสร็จแล้ว (${done.length})</h3>
+          <table>
+            <thead><tr><th>AS Code</th><th>ชื่อ</th><th>เวลาที่กดเสร็จ</th></tr></thead>
+            <tbody>
+              ${done.map(r => `
+                <tr>
+                  <td>${escapeHtml(r.as_code)}</td>
+                  <td>${escapeHtml(r.as_name || '-')}</td>
+                  <td style="font-size: 13px; color: var(--text-soft);">${r.done_at ? formatDate(r.done_at) : '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+    `;
+    
+    content.querySelector('#ltpRefresh').onclick = loadProgress;
+    
+    const copyCodesBtn = content.querySelector('#ltpCopyCodes');
+    if (copyCodesBtn) copyCodesBtn.onclick = () => {
+      copyText(pending.map(r => r.as_code).join(', '), 'รหัส AS ที่ยังไม่ทำ');
+    };
+    const copyMsgBtn = content.querySelector('#ltpCopyMsg');
+    if (copyMsgBtn) copyMsgBtn.onclick = () => {
+      const parts = [];
+      parts.push(`ขอติดตามงาน "${res.task.title}" ครับ`);
+      parts.push(`ลิงก์: ${res.task.link_url}`);
+      if (res.task.deadline) parts.push(`กำหนดส่ง: ${res.task.deadline}`);
+      parts.push('━━━━━━━━━━━━━━');
+      parts.push('ยังไม่ได้ทำ:');
+      pending.forEach(r => parts.push(`- ${r.as_code}${r.as_name ? ' ' + r.as_name : ''}`));
+      copyText(parts.join('\n'), 'ข้อความติดตาม');
+    };
+    
+    content.querySelector('#ltpDelete').onclick = async () => {
+      if (!confirm('ลบ Link Task นี้และสถานะเสร็จทั้งหมด? ดำเนินการนี้ไม่สามารถยกเลิกได้')) return;
+      setState({loading: true});
+      try {
+        const r = await api('admin_delete_link_task', {token: state.token, task_id: state.data.task_id, confirm: 'DELETE'});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_linktasks', data: {}}); }
+        else setMsg('error', r.error);
+      } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+    };
+  };
+  
+  loadProgress();
+}
 
 async function renderAdminUsers(app) {
   app.appendChild(adminTabs('admin_users'));
