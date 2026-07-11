@@ -2,8 +2,17 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>AS Survey System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>SS Survey System</title>
+
+<!-- PWA: installable app config -->
+<meta name="theme-color" content="#1e40af">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SS Survey">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -726,7 +735,7 @@ function render() {
     const h = document.createElement('div');
     h.className = 'header';
     h.innerHTML = `
-      <h1>AS Survey ${state.user.role === 'super_admin' ? '(Admin)' : ''} ${demoMode ? '<span class="badge" style="background:#fde68a;color:#92400e;">🎭 DEMO</span>' : ''}</h1>
+      <h1>SS Survey ${state.user.role === 'super_admin' ? '(Admin)' : ''} ${demoMode ? '<span class="badge" style="background:#fde68a;color:#92400e;">🎭 DEMO</span>' : ''}</h1>
       <div class="meta">${escapeHtml(state.user.name)} · <a href="#" id="logoutLink">${demoMode ? 'ออกจาก Demo' : 'ออก'}</a></div>
     `;
     app.appendChild(h);
@@ -782,7 +791,7 @@ function renderSplash(app) {
   const div = document.createElement('div');
   div.className = 'card text-center';
   div.innerHTML = `
-    <h2>AS Survey System</h2>
+    <h2>SS Survey System</h2>
     <p style="color: var(--text-soft); margin-bottom: 24px;">เลือกประเภทผู้ใช้งาน</p>
     <div class="gap-8" style="justify-content: center;">
       <button class="btn" id="asBtn">AS Login</button>
@@ -2568,7 +2577,7 @@ function renderAdminSettings(app) {
     
     <h3 style="margin-top: 24px;">เกี่ยวกับระบบ</h3>
     <div style="color: var(--text-soft); font-size: 13px;">
-      <p>AS Survey System (Lite) — v1.0</p>
+      <p>SS Survey System (Lite) — v1.0</p>
       <p>Backend: Google Apps Script + Sheets</p>
       <p>Frontend: Static HTML on GitHub Pages</p>
     </div>
@@ -2590,6 +2599,78 @@ function renderAdminSettings(app) {
     }
   };
 }
+
+// ============================================================
+// PWA SETUP — make the app installable (Add to Home Screen)
+// Manifest + service worker are generated in-page so there are
+// no extra files to upload to GitHub. Single index.html only.
+// ============================================================
+
+(function setupPWA() {
+  // Build manifest dynamically and inject as a Blob URL
+  const manifest = {
+    name: 'SS Survey System',
+    short_name: 'SS Survey',
+    description: 'ระบบสำรวจภาคสนามสำหรับ Area Supervisor',
+    start_url: '.',
+    scope: '.',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#fafafa',
+    theme_color: '#1e40af',
+    lang: 'th',
+    icons: [
+      { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
+  try {
+    const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+    const manifestURL = URL.createObjectURL(blob);
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = manifestURL;
+    document.head.appendChild(link);
+  } catch (e) { /* manifest injection failed — app still works as normal web page */ }
+  
+  // Register the service worker (required for install prompt).
+  // Must be a REAL file on the server — sw.js sits next to index.html.
+  // (Blob-URL service workers don't work in production: wrong scope + media type.)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {
+        /* SW optional — app still works as a normal web page without it,
+           just won't be installable until sw.js is present */
+      });
+    });
+  }
+  
+  // Optional: show a subtle "ติดตั้งแอป" hint when installable (Android/Chrome)
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    showInstallHint();
+  });
+  
+  function showInstallHint() {
+    if (document.getElementById('pwaInstallBar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'pwaInstallBar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e40af;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;z-index:9999;font-size:14px;box-shadow:0 -2px 8px rgba(0,0,0,0.15);';
+    bar.innerHTML = '<span>📲 ติดตั้งเป็นแอปบนหน้าจอได้</span><span><button id="pwaInstallBtn" style="background:#fff;color:#1e40af;border:none;border-radius:6px;padding:6px 14px;font-weight:600;cursor:pointer;margin-right:8px;">ติดตั้ง</button><button id="pwaDismissBtn" style="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;">×</button></span>';
+    document.body.appendChild(bar);
+    document.getElementById('pwaInstallBtn').onclick = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      bar.remove();
+    };
+    document.getElementById('pwaDismissBtn').onclick = () => bar.remove();
+  }
+})();
 
 // ============================================================
 // BOOT
