@@ -2152,12 +2152,15 @@ async function renderAdminLinkTasks(app) {
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   
-  // Load link tasks and users in parallel
-  let tasksRes, usersRes;
+  // Load link tasks, users, and branches in parallel
+  // (branches are needed because Account lives on branches, not users —
+  //  filtering AS by Account means "AS who covers >=1 branch in that account")
+  let tasksRes, usersRes, branchesRes;
   try {
-    [tasksRes, usersRes] = await Promise.all([
+    [tasksRes, usersRes, branchesRes] = await Promise.all([
       api('admin_list_link_tasks', {token: state.token}),
-      api('admin_get_users', {token: state.token})
+      api('admin_get_users', {token: state.token}),
+      api('admin_get_branches', {token: state.token})
     ]);
   } catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
   
@@ -2168,6 +2171,18 @@ async function renderAdminLinkTasks(app) {
   }
   const asUsers = (usersRes.ok ? usersRes.users : []).filter(u => u.role === 'as' && u.status === 'active');
   const tasks = tasksRes.link_tasks;
+  const allBranches = branchesRes.ok ? branchesRes.branches : [];
+  
+  // Map: AS code (uppercase) → Set of accounts they cover
+  const asAccounts = {};
+  allBranches.forEach(b => {
+    const code = String(b.assigned_as_code || '').trim().toUpperCase();
+    const acct = String(b.account || '').trim();
+    if (!code || !acct) return;
+    if (!asAccounts[code]) asAccounts[code] = new Set();
+    asAccounts[code].add(acct);
+  });
+  const accountList = [...new Set(allBranches.map(b => String(b.account || '').trim()))].filter(Boolean).sort();
   
   const selectedAS = new Set();
   
@@ -2215,10 +2230,13 @@ async function renderAdminLinkTasks(app) {
       </div>
       <div class="form-row">
         <label>เลือก AS ที่ต้องทำ (<span id="ltAsCount">0</span> / ${asUsers.length} คน)</label>
+        <div class="filter-row mb-12">
+          <select id="ltAcctFilter"><option value="">ทุก Account</option>${accountList.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}</select>
+          <input type="text" id="ltAsSearch" placeholder="ค้นหา AS..." />
+        </div>
         <div class="gap-8 mb-12">
-          <button type="button" class="btn btn-sm btn-secondary" id="ltSelAll">เลือกทั้งหมด</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="ltSelAll">เลือกทั้งหมดที่กรอง</button>
           <button type="button" class="btn btn-sm btn-secondary" id="ltClear">ล้าง</button>
-          <input type="text" id="ltAsSearch" placeholder="ค้นหา AS..." style="flex: 1; min-width: 120px; padding: 6px 10px; font-size: 13px;" />
         </div>
         <div class="branch-picker" id="ltAsPicker" style="max-height: 220px;"></div>
       </div>
@@ -2232,16 +2250,24 @@ async function renderAdminLinkTasks(app) {
   
   const renderAsPicker = () => {
     const q = div.querySelector('#ltAsSearch').value.toLowerCase();
-    const filtered = asUsers.filter(u => 
-      !q || String(u.login_code).toLowerCase().includes(q) || String(u.name).toLowerCase().includes(q)
-    );
+    const acct = div.querySelector('#ltAcctFilter').value;
+    const filtered = asUsers.filter(u => {
+      const code = String(u.login_code).trim().toUpperCase();
+      const covers = asAccounts[code];
+      if (acct && !(covers && covers.has(acct))) return false;
+      return !q || String(u.login_code).toLowerCase().includes(q) || String(u.name).toLowerCase().includes(q);
+    });
     const picker = div.querySelector('#ltAsPicker');
-    picker.innerHTML = filtered.map(u => `
-      <label>
-        <input type="checkbox" value="${escapeHtml(u.login_code)}" ${selectedAS.has(u.login_code) ? 'checked' : ''} />
-        <span><strong>${escapeHtml(u.login_code)}</strong> · ${escapeHtml(u.name)}</span>
-      </label>
-    `).join('') || '<div style="text-align:center; color: var(--text-soft); padding: 12px; font-size: 13px;">ไม่พบ AS</div>';
+    picker.innerHTML = filtered.map(u => {
+      const code = String(u.login_code).trim().toUpperCase();
+      const covers = asAccounts[code] ? [...asAccounts[code]].sort().join(', ') : 'ไม่มีสาขา';
+      return `
+        <label>
+          <input type="checkbox" value="${escapeHtml(u.login_code)}" ${selectedAS.has(u.login_code) ? 'checked' : ''} />
+          <span><strong>${escapeHtml(u.login_code)}</strong> · ${escapeHtml(u.name)} <span style="color: var(--text-soft); font-size: 12px;">· ${escapeHtml(covers)}</span></span>
+        </label>
+      `;
+    }).join('') || '<div style="text-align:center; color: var(--text-soft); padding: 12px; font-size: 13px;">ไม่พบ AS ตาม filter นี้</div>';
     picker.querySelectorAll('input[type=checkbox]').forEach(cb => {
       cb.onchange = () => {
         if (cb.checked) selectedAS.add(cb.value);
@@ -2251,6 +2277,7 @@ async function renderAdminLinkTasks(app) {
     });
   };
   div.querySelector('#ltAsSearch').oninput = renderAsPicker;
+  div.querySelector('#ltAcctFilter').onchange = renderAsPicker;
   div.querySelector('#ltSelAll').onclick = () => {
     div.querySelectorAll('#ltAsPicker input[type=checkbox]').forEach(cb => {
       if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
