@@ -1327,8 +1327,15 @@ async function renderAdminHome(app) {
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   
-  let res;
-  try { res = await api('admin_list_surveys', {token: state.token}); }
+  // Load surveys and link tasks together — this page is the single place
+  // to see every job that has been created, of both types.
+  let res, ltRes;
+  try {
+    [res, ltRes] = await Promise.all([
+      api('admin_list_surveys', {token: state.token}),
+      api('admin_list_link_tasks', {token: state.token})
+    ]);
+  }
   catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
   
   if (!res.ok) {
@@ -1337,9 +1344,13 @@ async function renderAdminHome(app) {
     return;
   }
   
+  // Link tasks are optional — if the Sheet tabs aren't set up, still show surveys
+  const linkTasks = (ltRes && ltRes.ok) ? ltRes.link_tasks : [];
+  const ltError = (ltRes && !ltRes.ok) ? ltRes.error : null;
+  
   div.innerHTML = `
-    <div class="card">
-      <h2>Survey ทั้งหมด (${res.surveys.length})</h2>
+    <div class="card" style="border-left: 4px solid var(--primary);">
+      <h2>📋 Survey สาขา (${res.surveys.length})</h2>
       ${res.surveys.length === 0 ? '<div class="empty">ยังไม่มี survey — ไปที่ "สร้าง Survey" เพื่อเริ่ม</div>' : `
         <table>
           <thead><tr><th>ชื่อ</th><th>สาขา</th><th>คำถาม</th><th>สถานะ</th><th></th></tr></thead>
@@ -1353,7 +1364,30 @@ async function renderAdminHome(app) {
                 <td>${s.branch_count}</td>
                 <td>${s.question_count}</td>
                 <td><span class="badge badge-${s.status === 'published' ? 'submitted' : 'draft'}">${s.status}</span></td>
-                <td><button class="btn btn-sm" data-id="${escapeHtml(s.survey_id)}">ดู Progress</button></td>
+                <td><button class="btn btn-sm" data-survey-id="${escapeHtml(s.survey_id)}">ดู Progress</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+    
+    <div class="card" style="border-left: 4px solid #7c3aed;">
+      <h2>🔗 งานลิงก์ภายนอก (${linkTasks.length})</h2>
+      ${ltError ? `<div class="alert alert-error" style="margin:0;">${escapeHtml(ltError)}</div>` :
+        linkTasks.length === 0 ? '<div class="empty">ยังไม่มีงานลิงก์ — ไปที่ "🔗 สร้าง Link Task" เพื่อเริ่ม</div>' : `
+        <table>
+          <thead><tr><th>หัวข้อ</th><th>มอบหมาย</th><th>เสร็จ</th><th></th></tr></thead>
+          <tbody>
+            ${linkTasks.map(t => `
+              <tr>
+                <td>
+                  <div style="font-weight: 500;">${escapeHtml(t.title)}</div>
+                  <div style="font-size: 12px; color: var(--text-soft);">${formatDate(t.created_at)}${t.deadline ? ' · กำหนดส่ง ' + escapeHtml(String(t.deadline)) : ''}</div>
+                </td>
+                <td>${t.assigned_count} คน</td>
+                <td><span class="badge badge-${t.done_count >= t.assigned_count ? 'submitted' : 'pending'}">${t.done_count}/${t.assigned_count}</span></td>
+                <td><button class="btn btn-sm" data-task-id="${escapeHtml(t.task_id)}" style="background: #7c3aed;">ดู Progress</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -1362,8 +1396,11 @@ async function renderAdminHome(app) {
     </div>
   `;
   
-  div.querySelectorAll('[data-id]').forEach(b => {
-    b.onclick = () => { setState({data: {survey_id: b.dataset.id}, screen: 'admin_progress'}); };
+  div.querySelectorAll('[data-survey-id]').forEach(b => {
+    b.onclick = () => { setState({data: {survey_id: b.dataset.surveyId}, screen: 'admin_progress'}); };
+  });
+  div.querySelectorAll('[data-task-id]').forEach(b => {
+    b.onclick = () => { setState({data: {task_id: b.dataset.taskId}, screen: 'admin_linktask_progress'}); };
   });
 }
 
@@ -1371,7 +1408,7 @@ function adminTabs(active) {
   const tabs = [
     {key: 'admin_home', label: 'รายการ Survey'},
     {key: 'admin_create', label: '+ สร้าง Survey'},
-    {key: 'admin_linktasks', label: '🔗 Link Task'},
+    {key: 'admin_linktasks', label: '+ 🔗 สร้าง Link Task'},
     {key: 'admin_users', label: 'จัดการ User'},
     {key: 'admin_settings', label: 'ตั้งค่า'}
   ];
@@ -2152,25 +2189,24 @@ async function renderAdminLinkTasks(app) {
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   
-  // Load link tasks, users, and branches in parallel
-  // (branches are needed because Account lives on branches, not users —
-  //  filtering AS by Account means "AS who covers >=1 branch in that account")
-  let tasksRes, usersRes, branchesRes;
+  // This page is create-only now — the list of created tasks lives on
+  // the "รายการ Survey" page. We need users (to assign) and branches
+  // (because Account lives on branches, not users — filtering AS by
+  //  Account means "AS who covers >=1 branch in that account").
+  let usersRes, branchesRes;
   try {
-    [tasksRes, usersRes, branchesRes] = await Promise.all([
-      api('admin_list_link_tasks', {token: state.token}),
+    [usersRes, branchesRes] = await Promise.all([
       api('admin_get_users', {token: state.token}),
       api('admin_get_branches', {token: state.token})
     ]);
   } catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
   
-  if (!tasksRes.ok) {
-    if (tasksRes.error && tasksRes.error.indexOf('Session') !== -1) { logout(); return; }
-    div.innerHTML = `<div class="alert alert-error">${escapeHtml(tasksRes.error)}</div>`;
+  if (!usersRes.ok) {
+    if (usersRes.error && usersRes.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(usersRes.error)}</div>`;
     return;
   }
-  const asUsers = (usersRes.ok ? usersRes.users : []).filter(u => u.role === 'as' && u.status === 'active');
-  const tasks = tasksRes.link_tasks;
+  const asUsers = usersRes.users.filter(u => u.role === 'as' && u.status === 'active');
   const allBranches = branchesRes.ok ? branchesRes.branches : [];
   
   // Map: AS code (uppercase) → Set of accounts they cover
@@ -2187,28 +2223,6 @@ async function renderAdminLinkTasks(app) {
   const selectedAS = new Set();
   
   div.innerHTML = `
-    <div class="card" style="border-left: 4px solid #7c3aed;">
-      <h2>🔗 Link Task ทั้งหมด (${tasks.length})</h2>
-      ${tasks.length === 0 ? '<div class="empty">ยังไม่มี Link Task — สร้างด้านล่างได้เลย</div>' : `
-        <table>
-          <thead><tr><th>หัวข้อ</th><th>มอบหมาย</th><th>เสร็จ</th><th></th></tr></thead>
-          <tbody>
-            ${tasks.map(t => `
-              <tr>
-                <td>
-                  <div style="font-weight: 500;">🔗 ${escapeHtml(t.title)}</div>
-                  <div style="font-size: 12px; color: var(--text-soft);">${formatDate(t.created_at)}${t.deadline ? ' · กำหนดส่ง ' + escapeHtml(String(t.deadline)) : ''}</div>
-                </td>
-                <td>${t.assigned_count} คน</td>
-                <td><span class="badge badge-${t.done_count >= t.assigned_count ? 'submitted' : 'pending'}">${t.done_count}/${t.assigned_count}</span></td>
-                <td><button class="btn btn-sm lt-view" data-id="${escapeHtml(t.task_id)}" style="background: #7c3aed;">ดู Progress</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `}
-    </div>
-    
     <div class="card">
       <h2>+ สร้าง Link Task ใหม่</h2>
       <div class="form-row">
@@ -2243,10 +2257,6 @@ async function renderAdminLinkTasks(app) {
       <button class="btn btn-success btn-block" id="ltPublish">เผยแพร่ Link Task</button>
     </div>
   `;
-  
-  div.querySelectorAll('.lt-view').forEach(b => {
-    b.onclick = () => setState({screen: 'admin_linktask_progress', data: {task_id: b.dataset.id}});
-  });
   
   const renderAsPicker = () => {
     const q = div.querySelector('#ltAsSearch').value.toLowerCase();
@@ -2311,22 +2321,22 @@ async function renderAdminLinkTasks(app) {
         assigned_as_codes: [...selectedAS]
       }, {usePost: true});
       setState({loading: false});
-      if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_linktasks', data: {}}); }
+      if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_home', data: {}}); }
       else setMsg('error', r.error);
     } catch (e) { setState({loading: false}); setMsg('error', e.message); }
   };
 }
 
 async function renderAdminLinkTaskProgress(app) {
-  app.appendChild(adminTabs('admin_linktasks'));
+  app.appendChild(adminTabs('admin_home'));
   
   const div = document.createElement('div');
   app.appendChild(div);
   
   const backBtn = document.createElement('button');
   backBtn.className = 'btn btn-secondary btn-sm mb-12';
-  backBtn.textContent = '← กลับรายการ Link Task';
-  backBtn.onclick = () => setState({screen: 'admin_linktasks', data: {}});
+  backBtn.textContent = '← กลับรายการ';
+  backBtn.onclick = () => setState({screen: 'admin_home', data: {}});
   div.appendChild(backBtn);
   
   const content = document.createElement('div');
@@ -2429,7 +2439,7 @@ async function renderAdminLinkTaskProgress(app) {
       try {
         const r = await api('admin_delete_link_task', {token: state.token, task_id: state.data.task_id, confirm: 'DELETE'});
         setState({loading: false});
-        if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_linktasks', data: {}}); }
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_home', data: {}}); }
         else setMsg('error', r.error);
       } catch (e) { setState({loading: false}); setMsg('error', e.message); }
     };
