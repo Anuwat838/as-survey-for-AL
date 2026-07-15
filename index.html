@@ -1428,6 +1428,43 @@ function formatDate(s) {
   try { return new Date(s).toLocaleString('th-TH'); } catch (e) { return s; }
 }
 
+// Thai-style short date "25 ต.ค. 2026" — mirrors formatThaiDate() in Code.gs
+function formatThaiDate(dateVal) {
+  if (!dateVal) return 'ไม่กำหนด';
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  } catch (e) { return String(dateVal); }
+}
+
+// The URL of this app — used so the pasted LINE message contains a tappable link.
+// (The bot could never include this; it has no idea where the app is hosted.)
+function appUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
+// Builds the "new survey" announcement to paste into the LINE group.
+// Format matches notifyLineNewSurvey() in Code.gs so messages look consistent
+// whether they were sent by the bot or pasted by hand.
+function buildSurveyAnnounce(title, deadline, branchCount) {
+  return '📋 มี Survey ใหม่!\n\n' +
+    '"' + title + '"\n' +
+    'กำหนดส่ง: ' + formatThaiDate(deadline) + '\n' +
+    'มอบหมาย: ' + branchCount + ' สาขา\n\n' +
+    'เข้าทำได้ที่แอป SS Survey\n' + appUrl();
+}
+
+// Builds the "new link task" announcement. Mirrors notifyLineNewLinkTask().
+function buildLinkTaskAnnounce(title, deadline, linkUrl, asCount) {
+  return '🔗 มีงานลิงก์ใหม่!\n\n' +
+    '"' + title + '"\n' +
+    'กำหนดส่ง: ' + formatThaiDate(deadline) + '\n' +
+    'มอบหมาย: ' + asCount + ' คน\n\n' +
+    'เปิดลิงก์: ' + linkUrl;
+}
+
 // ============================================================
 // ADMIN CREATE SURVEY
 // ============================================================
@@ -1755,8 +1792,8 @@ CNX003" style="font-family: ui-monospace, monospace; font-size: 13px;"></textare
       }, {usePost: true});
       setState({loading: false});
       if (res.ok) {
-        setMsg('success', 'เผยแพร่สำเร็จ');
-        setState({screen: 'admin_home', data: {}});
+        setMsg('success', 'เผยแพร่สำเร็จ — กด "Copy ข้อความแจ้งกลุ่ม LINE" เพื่อแจ้งทีม');
+        setState({screen: 'admin_progress', data: {survey_id: res.survey_id}});
       } else {
         setMsg('error', res.error);
       }
@@ -1934,7 +1971,8 @@ async function renderAdminProgress(app) {
         <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
         
         <div class="gap-8 mt-12">
-          <button class="btn btn-sm" id="refreshBtn">🔄 รีเฟรช</button>
+          <button class="btn btn-sm" id="announceBtn" style="background: #06c755;">💬 Copy ข้อความแจ้งกลุ่ม LINE</button>
+          <button class="btn btn-sm btn-secondary" id="refreshBtn">🔄 รีเฟรช</button>
           <button class="btn btn-sm btn-secondary" id="exportBtn">📥 Export Excel (CSV)</button>
           <button class="btn btn-sm btn-danger" id="deleteBtn">🗑️ ลบ Survey + คำตอบ</button>
         </div>
@@ -2023,6 +2061,12 @@ async function renderAdminProgress(app) {
     content.querySelector('#refreshBtn').onclick = loadProgress;
     content.querySelector('#exportBtn').onclick = exportSurvey;
     content.querySelector('#deleteBtn').onclick = deleteSurvey;
+    content.querySelector('#announceBtn').onclick = () => {
+      copyText(
+        buildSurveyAnnounce(res.survey.title, res.survey.deadline, res.summary.total),
+        'ข้อความแจ้งกลุ่ม — วางในกลุ่ม LINE ได้เลย'
+      );
+    };
     
     // Expand/collapse AS cards
     content.querySelectorAll('.as-head').forEach(head => {
@@ -2321,7 +2365,10 @@ async function renderAdminLinkTasks(app) {
         assigned_as_codes: [...selectedAS]
       }, {usePost: true});
       setState({loading: false});
-      if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_home', data: {}}); }
+      if (r.ok) {
+        setMsg('success', 'สร้างสำเร็จ — กด "Copy ข้อความแจ้งกลุ่ม LINE" เพื่อแจ้งทีม');
+        setState({screen: 'admin_linktask_progress', data: {task_id: r.task_id}});
+      }
       else setMsg('error', r.error);
     } catch (e) { setState({loading: false}); setMsg('error', e.message); }
   };
@@ -2369,7 +2416,8 @@ async function renderAdminLinkTaskProgress(app) {
         <div class="progress-bar"><div class="fill" style="width: ${res.summary.percent}%"></div></div>
         
         <div class="gap-8 mt-12">
-          <button class="btn btn-sm" id="ltpRefresh">🔄 รีเฟรช</button>
+          <button class="btn btn-sm" id="ltpAnnounce" style="background: #06c755;">💬 Copy ข้อความแจ้งกลุ่ม LINE</button>
+          <button class="btn btn-sm btn-secondary" id="ltpRefresh">🔄 รีเฟรช</button>
           ${pending.length > 0 ? `
             <button class="btn btn-sm btn-secondary" id="ltpCopyCodes">📋 Copy AS ที่ยังไม่ทำ (${pending.length})</button>
             <button class="btn btn-sm btn-secondary" id="ltpCopyMsg">💬 Copy ข้อความติดตาม</button>
@@ -2416,6 +2464,12 @@ async function renderAdminLinkTaskProgress(app) {
     `;
     
     content.querySelector('#ltpRefresh').onclick = loadProgress;
+    content.querySelector('#ltpAnnounce').onclick = () => {
+      copyText(
+        buildLinkTaskAnnounce(res.task.title, res.task.deadline, res.task.link_url, res.summary.total),
+        'ข้อความแจ้งกลุ่ม — วางในกลุ่ม LINE ได้เลย'
+      );
+    };
     
     const copyCodesBtn = content.querySelector('#ltpCopyCodes');
     if (copyCodesBtn) copyCodesBtn.onclick = () => {
