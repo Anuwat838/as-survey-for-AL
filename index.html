@@ -579,6 +579,25 @@ function mockApi(action, p) {
       return ok({message: 'อัปเดตสถานะ (demo) สำเร็จ'});
     }
     
+    case 'admin_delete_users': {
+      const codes = typeof p.login_codes === 'string' ? JSON.parse(p.login_codes) : p.login_codes;
+      if (!codes || codes.length === 0) return fail('ไม่ได้เลือก user');
+      const targetSet = {};
+      codes.forEach(c => targetSet[String(c).trim().toUpperCase()] = true);
+      // Guard: self (demo admin is ADM01)
+      if (targetSet['ADM01']) return fail('ไม่สามารถลบตัวเองได้ (คุณกำลัง login อยู่)');
+      // Guard: last active super_admin
+      const activeAdmins = mockDB.users.filter(u => u.role === 'super_admin' && u.status === 'active');
+      const remaining = activeAdmins.filter(u => !targetSet[String(u.login_code).trim().toUpperCase()]);
+      if (activeAdmins.length > 0 && remaining.length === 0) {
+        return fail('ลบไม่ได้ — จะไม่เหลือ Admin ที่ใช้งานได้เลย ต้องเหลืออย่างน้อย 1 คน');
+      }
+      const before = mockDB.users.length;
+      mockDB.users = mockDB.users.filter(u => !targetSet[String(u.login_code).trim().toUpperCase()]);
+      const deleted = before - mockDB.users.length;
+      return ok({message: 'ลบ ' + deleted + ' user สำเร็จ (demo)', deleted});
+    }
+    
     case 'admin_create_survey': {
       const questions = typeof p.questions === 'string' ? JSON.parse(p.questions) : p.questions;
       const rawBranches = typeof p.selected_branches === 'string' ? JSON.parse(p.selected_branches) : p.selected_branches;
@@ -2519,25 +2538,36 @@ async function renderAdminUsers(app) {
   }
   
   const users = res.users;
+  const myCode = state.user ? String(state.user.login_code).trim().toUpperCase() : '';
   
   div.innerHTML = `
     <div class="card">
-      <h2>User ทั้งหมด (${users.length})</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h2 style="margin:0;">User ทั้งหมด (${users.length})</h2>
+        <button class="btn btn-sm btn-danger" id="delSelectedBtn" style="display:none;">🗑️ ลบที่เลือก (<span id="delCount">0</span>)</button>
+      </div>
       <table>
-        <thead><tr><th>Code</th><th>ชื่อ</th><th>Role</th><th>เบอร์</th><th>สถานะ</th><th></th></tr></thead>
+        <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="selAllUsers" title="เลือกทั้งหมด" /></th>
+          <th>Code</th><th>ชื่อ</th><th>Role</th><th>เบอร์</th><th>สถานะ</th><th></th>
+        </tr></thead>
         <tbody>
-          ${users.map(u => `
+          ${users.map(u => {
+            const isSelf = String(u.login_code).trim().toUpperCase() === myCode;
+            return `
             <tr>
-              <td>${escapeHtml(u.login_code)}</td>
+              <td>${isSelf ? '' : `<input type="checkbox" class="user-check" value="${escapeHtml(u.login_code)}" />`}</td>
+              <td>${escapeHtml(u.login_code)}${isSelf ? ' <span style="font-size:11px; color:var(--text-soft);">(คุณ)</span>' : ''}</td>
               <td>${escapeHtml(u.name)}</td>
               <td>${u.role === 'super_admin' ? 'Admin' : 'AS'}</td>
               <td>${escapeHtml(u.phone || '-')}</td>
               <td><span class="badge badge-${u.status === 'active' ? 'submitted' : 'draft'}">${u.status}</span></td>
               <td><button class="btn btn-sm btn-secondary toggle-status" data-code="${escapeHtml(u.login_code)}" data-status="${escapeHtml(u.status)}">${u.status === 'active' ? 'ระงับ' : 'เปิดใช้'}</button></td>
             </tr>
-          `).join('')}
+          `;}).join('')}
         </tbody>
       </table>
+      <p style="font-size:12px; color:var(--text-soft); margin:8px 0 0;">ติ๊กเลือกเพื่อลบถาวร (บัญชีของคุณเองลบไม่ได้) · การลบไม่กระทบคำตอบ survey ที่ AS เคยส่งไว้</p>
     </div>
     
     <div class="card">
@@ -2584,6 +2614,43 @@ BKK11, สมหญิง รักงาน, 0892223333"></textarea>
       } catch (e) { setState({loading: false}); setMsg('error', e.message); }
     };
   });
+  
+  // ---- Multi-select delete ----
+  const checks = () => [...div.querySelectorAll('.user-check')];
+  const delBtn = div.querySelector('#delSelectedBtn');
+  const delCount = div.querySelector('#delCount');
+  const selAll = div.querySelector('#selAllUsers');
+  
+  const updateDelBar = () => {
+    const n = checks().filter(c => c.checked).length;
+    delCount.textContent = n;
+    delBtn.style.display = n > 0 ? 'inline-flex' : 'none';
+    if (selAll) selAll.checked = n > 0 && n === checks().length;
+  };
+  checks().forEach(c => { c.onchange = updateDelBar; });
+  if (selAll) selAll.onchange = () => {
+    checks().forEach(c => { c.checked = selAll.checked; });
+    updateDelBar();
+  };
+  
+  delBtn.onclick = async () => {
+    const selected = checks().filter(c => c.checked).map(c => c.value);
+    if (selected.length === 0) return;
+    // Build a name list for the confirmation
+    const nameByCode = {};
+    users.forEach(u => nameByCode[String(u.login_code).trim().toUpperCase()] = u.name);
+    const preview = selected.slice(0, 10).map(c => '• ' + c + ' (' + (nameByCode[String(c).trim().toUpperCase()] || '') + ')').join('\n') +
+      (selected.length > 10 ? '\n... และอีก ' + (selected.length - 10) + ' คน' : '');
+    if (!confirm('ลบ ' + selected.length + ' user ต่อไปนี้ถาวร? กู้คืนไม่ได้\n\n' + preview)) return;
+    
+    setState({loading: true});
+    try {
+      const r = await api('admin_delete_users', {token: state.token, login_codes: selected}, {usePost: true});
+      setState({loading: false});
+      if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_users'}); }
+      else setMsg('error', r.error);
+    } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+  };
   
   const oneCodeInput = div.querySelector('#oneCode');
   oneCodeInput.oninput = () => { oneCodeInput.value = oneCodeInput.value.toUpperCase(); };
