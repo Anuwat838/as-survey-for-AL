@@ -347,6 +347,13 @@ function makeSeedDB() {
     ],
     linkTaskDone: [
       {task_id: 'L_DEMO2', as_code: 'AS01', done_at: new Date(Date.now() - 24*3600*1000).toISOString()}
+    ],
+    announcements: [
+      {announcement_id: 'A_DEMO1', title: 'ปิดปรับปรุงระบบ 15 ก.ค. 22:00-24:00', body: 'คืนวันที่ 15 ก.ค. ระบบจะปิดปรับปรุง 2 ชม. งดส่งคำตอบช่วงเวลาดังกล่าว', link_url: 'https://example.com/details', pinned: 'true', status: 'published', created_at: new Date(Date.now() - 2*24*3600*1000).toISOString()},
+      {announcement_id: 'A_DEMO2', title: 'ยินดีต้อนรับสู่ระบบ SS Survey', body: 'ขอต้อนรับทุกท่านเข้าสู่ระบบใหม่ หากมีปัญหาติดต่อ admin ได้เลย', link_url: '', pinned: 'false', status: 'published', created_at: new Date(Date.now() - 7*24*3600*1000).toISOString()}
+    ],
+    announcementAck: [
+      {announcement_id: 'A_DEMO2', as_code: 'AS01', acked_at: new Date(Date.now() - 6*24*3600*1000).toISOString()}
     ]
   };
 }
@@ -492,6 +499,71 @@ function mockApi(action, p) {
       const beforeT = mockDB.linkTasks.length;
       mockDB.linkTasks = mockDB.linkTasks.filter(t => t.task_id !== p.task_id);
       return ok({message: 'ลบสำเร็จ (demo): ' + (beforeT-mockDB.linkTasks.length) + ' task, ' + (beforeD-mockDB.linkTaskDone.length) + ' สถานะเสร็จ'});
+    }
+    
+    case 'get_announcements': {
+      const anns = (mockDB.announcements || []).filter(a => a.status === 'published').map(a => {
+        const ackRow = (mockDB.announcementAck || []).find(k => k.announcement_id === a.announcement_id && k.as_code === 'AS01');
+        return {
+          announcement_id: a.announcement_id, title: a.title, body: a.body,
+          link_url: a.link_url || '', pinned: String(a.pinned).toLowerCase() === 'true',
+          created_at: a.created_at, acked: !!ackRow, acked_at: ackRow ? ackRow.acked_at : null
+        };
+      });
+      anns.sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : String(b.created_at).localeCompare(String(a.created_at)));
+      return ok({announcements: anns});
+    }
+    
+    case 'announcement_ack': {
+      const a = (mockDB.announcements || []).find(a => a.announcement_id === p.announcement_id);
+      if (!a) return fail('ไม่พบประกาศนี้ (demo)');
+      const exists = mockDB.announcementAck.find(k => k.announcement_id === p.announcement_id && k.as_code === 'AS01');
+      if (!exists) mockDB.announcementAck.push({announcement_id: p.announcement_id, as_code: 'AS01', acked_at: new Date().toISOString()});
+      return ok({message: 'รับทราบแล้ว (demo)'});
+    }
+    
+    case 'admin_create_announcement': {
+      if (!p.title) return fail('กรุณากรอกหัวข้อ');
+      if (!p.body) return fail('กรุณากรอกเนื้อหา');
+      if (p.link_url && !/^https?:\/\/.+/.test(p.link_url)) return fail('ลิงก์ไม่ถูกต้อง');
+      const id = mockGenId('A');
+      mockDB.announcements.push({announcement_id: id, title: p.title, body: p.body, link_url: p.link_url || '', pinned: (p.pinned === true || String(p.pinned) === 'true') ? 'true' : 'false', status: 'published', created_at: new Date().toISOString()});
+      return ok({announcement_id: id, message: 'เผยแพร่ประกาศสำเร็จ (demo)'});
+    }
+    
+    case 'admin_list_announcements': {
+      const totalAS = mockDB.users.filter(u => u.role === 'as' && u.status === 'active').length;
+      const result = (mockDB.announcements || []).map(a => ({
+        announcement_id: a.announcement_id, title: a.title, body: a.body, link_url: a.link_url || '',
+        pinned: String(a.pinned).toLowerCase() === 'true', status: a.status, created_at: a.created_at,
+        ack_count: (mockDB.announcementAck || []).filter(k => k.announcement_id === a.announcement_id).length,
+        total_as: totalAS
+      }));
+      result.sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : String(b.created_at).localeCompare(String(a.created_at)));
+      return ok({announcements: result});
+    }
+    
+    case 'admin_get_announcement_progress': {
+      const a = (mockDB.announcements || []).find(a => a.announcement_id === p.announcement_id);
+      if (!a) return fail('ไม่พบประกาศนี้ (demo)');
+      const activeAS = mockDB.users.filter(u => u.role === 'as' && u.status === 'active');
+      const rows = activeAS.map(u => {
+        const ackRow = (mockDB.announcementAck || []).find(k => k.announcement_id === p.announcement_id && k.as_code === u.login_code);
+        return {as_code: u.login_code, as_name: u.name, as_phone: u.phone || '', acked: !!ackRow, acked_at: ackRow ? ackRow.acked_at : ''};
+      });
+      rows.sort((a,b) => a.acked !== b.acked ? (a.acked ? 1 : -1) : String(a.as_code).localeCompare(String(b.as_code)));
+      const summary = {total: rows.length, acked: rows.filter(r=>r.acked).length, pending: rows.filter(r=>!r.acked).length};
+      summary.percent = summary.total ? Math.round(summary.acked/summary.total*100) : 0;
+      return ok({announcement: {announcement_id: a.announcement_id, title: a.title, body: a.body, link_url: a.link_url || '', pinned: String(a.pinned).toLowerCase() === 'true', created_at: a.created_at}, summary, rows});
+    }
+    
+    case 'admin_delete_announcement': {
+      if (p.confirm !== 'DELETE') return fail('ต้องส่ง confirm=DELETE');
+      const bA = mockDB.announcementAck.length;
+      mockDB.announcementAck = mockDB.announcementAck.filter(k => k.announcement_id !== p.announcement_id);
+      const bN = mockDB.announcements.length;
+      mockDB.announcements = mockDB.announcements.filter(a => a.announcement_id !== p.announcement_id);
+      return ok({message: 'ลบสำเร็จ (demo): ' + (bN-mockDB.announcements.length) + ' ประกาศ, ' + (bA-mockDB.announcementAck.length) + ' การรับทราบ'});
     }
     
     case 'get_survey': {
@@ -784,6 +856,7 @@ function render() {
     as_login: renderAsLogin,
     admin_login: renderAdminLogin,
     as_home: renderAsHome,
+    as_announcements: renderAsAnnouncements,
     as_survey_branches: renderAsSurveyBranches,
     as_survey: renderAsSurvey,
     admin_home: renderAdminHome,
@@ -791,6 +864,8 @@ function render() {
     admin_progress: renderAdminProgress,
     admin_linktasks: renderAdminLinkTasks,
     admin_linktask_progress: renderAdminLinkTaskProgress,
+    admin_announcements: renderAdminAnnouncements,
+    admin_announcement_progress: renderAdminAnnouncementProgress,
     admin_users: renderAdminUsers,
     admin_settings: renderAdminSettings
   };
@@ -879,13 +954,100 @@ function renderLoginForm(app, title, fromScreen, codeLabel, action) {
 // AS HOME — Task List
 // ============================================================
 
+// Tab bar shown on AS screens to switch between งาน and 📢 ประกาศ.
+// unreadCount (optional) shows a red badge on the ประกาศ tab.
+function asTabBar(active, unreadCount) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex; gap:8px; margin-bottom:16px;';
+  const mk = (key, label, badge) => {
+    const on = active === key;
+    return `<button data-tab="${key}" style="flex:1; padding:10px; border-radius:8px; border:1px solid ${on ? 'var(--primary)' : 'var(--border)'}; background:${on ? 'var(--primary)' : '#fff'}; color:${on ? '#fff' : 'var(--text)'}; font:inherit; font-weight:500; cursor:pointer; position:relative;">${label}${badge > 0 ? ` <span style="background:#dc2626; color:#fff; border-radius:999px; padding:1px 7px; font-size:11px; margin-left:4px;">${badge}</span>` : ''}</button>`;
+  };
+  wrap.innerHTML = mk('as_home', '📋 งาน') + mk('as_announcements', '📢 ประกาศ', unreadCount || 0);
+  wrap.querySelectorAll('[data-tab]').forEach(b => {
+    b.onclick = () => { if (b.dataset.tab !== active) setState({screen: b.dataset.tab}); };
+  });
+  return wrap;
+}
+
+async function renderAsAnnouncements(app) {
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลดประกาศ...</div>';
+  
+  let res;
+  try { res = await api('get_announcements', {token: state.token}); }
+  catch (e) { div.innerHTML = `<div class="alert alert-error">โหลดไม่ได้: ${escapeHtml(e.message)}</div>`; return; }
+  
+  if (!res.ok) {
+    if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  
+  const anns = res.announcements || [];
+  const unread = anns.filter(a => !a.acked).length;
+  
+  div.innerHTML = '';
+  div.appendChild(asTabBar('as_announcements', unread));
+  
+  const box = document.createElement('div');
+  div.appendChild(box);
+  
+  if (anns.length === 0) {
+    box.innerHTML = '<div class="card empty">ยังไม่มีประกาศ</div>';
+    return;
+  }
+  
+  box.innerHTML = anns.map((a, i) => {
+    const pinned = a.pinned;
+    const acked = a.acked;
+    const border = pinned ? '#fde68a' : (acked ? '#a7f3d0' : '#a5f3fc');
+    const bg = pinned ? '#fffbeb' : (acked ? '#f0fdf4' : '#ecfeff');
+    return `
+      <div class="card" style="border:1px solid ${border}; background:${bg}; ${acked ? 'opacity:0.75;' : ''}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+          <div style="font-weight:600; display:flex; align-items:center; gap:8px;">${pinned ? '📌' : '📢'} ${escapeHtml(a.title)}</div>
+          <span class="badge badge-${acked ? 'submitted' : 'pending'}">${acked ? '✓ รับทราบแล้ว' : 'ยังไม่รับทราบ'}</span>
+        </div>
+        <div style="font-size:14px; margin-top:8px; color:#334155; white-space:pre-wrap;">${escapeHtml(a.body)}</div>
+        ${a.link_url ? `<div style="margin-top:10px;"><a href="${escapeHtml(a.link_url)}" target="_blank" rel="noopener" style="color:var(--announce, #0891b2); font-size:13px; font-weight:500;">🔗 เปิดลิงก์แนบ</a></div>` : ''}
+        <div style="font-size:12px; color:var(--text-soft); margin-top:8px;">
+          โดย Admin · ${formatDate(a.created_at)}${acked && a.acked_at ? ' · คุณรับทราบเมื่อ ' + formatDate(a.acked_at) : ''}
+        </div>
+        ${!acked ? `<div style="margin-top:10px;"><button class="btn btn-sm btn-success ack-btn" data-idx="${i}">✓ รับทราบ</button></div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  box.querySelectorAll('.ack-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const a = anns[parseInt(btn.dataset.idx)];
+      if (!confirm('ยืนยันรับทราบประกาศ "' + a.title + '"?\n(กดแล้วไม่สามารถยกเลิกได้)')) return;
+      setState({loading: true});
+      try {
+        const r = await api('announcement_ack', {token: state.token, announcement_id: a.announcement_id});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'as_announcements'}); }
+        else setMsg('error', r.error);
+      } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+    };
+  });
+}
+
 async function renderAsHome(app) {
   const div = document.createElement('div');
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลดงาน...</div>';
   
-  let res;
-  try { res = await api('get_tasks', {token: state.token}); }
+  // Fetch announcements too, just for the unread badge on the tab
+  let res, annRes;
+  try {
+    [res, annRes] = await Promise.all([
+      api('get_tasks', {token: state.token}),
+      api('get_announcements', {token: state.token})
+    ]);
+  }
   catch (e) { div.innerHTML = `<div class="alert alert-error">โหลดไม่ได้: ${escapeHtml(e.message)}</div>`; return; }
   
   if (!res.ok) {
@@ -900,8 +1062,14 @@ async function renderAsHome(app) {
   const linkDone = linkTasks.filter(t => t.done).length;
   const totalJobs = surveyGroups.length + linkTasks.length;
   const totalDone = completedCount + linkDone;
+  const unreadAnn = (annRes && annRes.ok) ? (annRes.announcements || []).filter(a => !a.acked).length : 0;
   
-  div.innerHTML = `
+  div.innerHTML = '';
+  div.appendChild(asTabBar('as_home', unreadAnn));
+  const body = document.createElement('div');
+  div.appendChild(body);
+  
+  body.innerHTML = `
     <div class="stat-grid">
       <div class="stat"><div class="num">${totalJobs}</div><div class="label">งานทั้งหมด</div></div>
       <div class="stat"><div class="num" style="color: var(--pending);">${totalJobs - totalDone}</div><div class="label">ยังไม่เสร็จ</div></div>
@@ -1428,6 +1596,7 @@ function adminTabs(active) {
     {key: 'admin_home', label: 'รายการ Survey'},
     {key: 'admin_create', label: '+ สร้าง Survey'},
     {key: 'admin_linktasks', label: '+ 🔗 สร้าง Link Task'},
+    {key: 'admin_announcements', label: '📢 ประกาศ'},
     {key: 'admin_users', label: 'จัดการ User'},
     {key: 'admin_settings', label: 'ตั้งค่า'}
   ];
@@ -2519,6 +2688,191 @@ async function renderAdminLinkTaskProgress(app) {
   };
   
   loadProgress();
+}
+
+// ============================================================
+// ADMIN ANNOUNCEMENTS
+// ============================================================
+
+async function renderAdminAnnouncements(app) {
+  app.appendChild(adminTabs('admin_announcements'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  let res;
+  try { res = await api('admin_list_announcements', {token: state.token}); }
+  catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+  
+  if (!res.ok) {
+    if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+    div.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+    return;
+  }
+  const anns = res.announcements;
+  
+  div.innerHTML = `
+    <div class="card">
+      <h2>+ สร้างประกาศใหม่</h2>
+      <div class="form-row">
+        <label>หัวข้อ <span class="required">*</span></label>
+        <input type="text" id="annTitle" placeholder="เช่น ปิดปรับปรุงระบบ 15 ก.ค." />
+      </div>
+      <div class="form-row">
+        <label>เนื้อหา <span class="required">*</span></label>
+        <textarea id="annBody" rows="3" placeholder="รายละเอียดประกาศ"></textarea>
+      </div>
+      <div class="form-row">
+        <label>ลิงก์แนบ (ไม่บังคับ)</label>
+        <input type="text" id="annLink" placeholder="https://..." />
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-weight:400; color:var(--text);">
+        <input type="checkbox" id="annPinned" /> 📌 ปักหมุดไว้บนสุด
+      </label>
+      <button class="btn btn-success btn-block" id="annPublish" style="margin-top:14px;">เผยแพร่ประกาศ</button>
+    </div>
+    
+    <div class="card" style="border-left: 4px solid #0891b2;">
+      <h2>📢 ประกาศทั้งหมด (${anns.length})</h2>
+      ${anns.length === 0 ? '<div class="empty">ยังไม่มีประกาศ</div>' : `
+        <table>
+          <thead><tr><th>หัวข้อ</th><th>รับทราบ</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody>
+            ${anns.map(a => `
+              <tr>
+                <td>
+                  <div style="font-weight:500;">${a.pinned ? '📌 ' : ''}${escapeHtml(a.title)}</div>
+                  <div style="font-size:12px; color:var(--text-soft);">${formatDate(a.created_at)}</div>
+                </td>
+                <td><span class="badge badge-${a.ack_count >= a.total_as ? 'submitted' : 'pending'}">${a.ack_count}/${a.total_as}</span></td>
+                <td>${a.pinned ? '<span class="badge" style="background:#fef9c3; color:#854d0e;">ปักหมุด</span>' : '—'}</td>
+                <td><button class="btn btn-sm" data-ann-id="${escapeHtml(a.announcement_id)}" style="background:#0891b2;">ดู Progress</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+  
+  div.querySelectorAll('[data-ann-id]').forEach(b => {
+    b.onclick = () => setState({screen: 'admin_announcement_progress', data: {announcement_id: b.dataset.annId}});
+  });
+  
+  div.querySelector('#annPublish').onclick = async () => {
+    const title = div.querySelector('#annTitle').value.trim();
+    const body = div.querySelector('#annBody').value.trim();
+    const link = div.querySelector('#annLink').value.trim();
+    const pinned = div.querySelector('#annPinned').checked;
+    
+    if (!title) { setMsg('error', 'กรุณากรอกหัวข้อ'); return; }
+    if (!body) { setMsg('error', 'กรุณากรอกเนื้อหา'); return; }
+    if (link && !/^https?:\/\/.+/.test(link)) { setMsg('error', 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://'); return; }
+    
+    setState({loading: true});
+    try {
+      const r = await api('admin_create_announcement', {
+        token: state.token, title, body, link_url: link, pinned
+      }, {usePost: true});
+      setState({loading: false});
+      if (r.ok) { setMsg('success', 'เผยแพร่ประกาศสำเร็จ'); setState({screen: 'admin_announcements'}); }
+      else setMsg('error', r.error);
+    } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+  };
+}
+
+async function renderAdminAnnouncementProgress(app) {
+  app.appendChild(adminTabs('admin_announcements'));
+  
+  const div = document.createElement('div');
+  app.appendChild(div);
+  
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-secondary btn-sm mb-12';
+  backBtn.textContent = '← กลับรายการประกาศ';
+  backBtn.onclick = () => setState({screen: 'admin_announcements', data: {}});
+  div.appendChild(backBtn);
+  
+  const content = document.createElement('div');
+  div.appendChild(content);
+  content.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+  
+  const load = async () => {
+    let res;
+    try { res = await api('admin_get_announcement_progress', {token: state.token, announcement_id: state.data.announcement_id}); }
+    catch (e) { content.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
+    if (!res.ok) {
+      if (res.error && res.error.indexOf('Session') !== -1) { logout(); return; }
+      content.innerHTML = `<div class="alert alert-error">${escapeHtml(res.error)}</div>`;
+      return;
+    }
+    
+    const pending = res.rows.filter(r => !r.acked);
+    const acked = res.rows.filter(r => r.acked);
+    
+    content.innerHTML = `
+      <div class="card" style="border-left: 4px solid #0891b2;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+          <h2 style="margin:0;">${res.announcement.pinned ? '📌 ' : '📢 '}${escapeHtml(res.announcement.title)}</h2>
+          <span style="font-size:20px; font-weight:600;">${res.summary.acked}<span style="font-size:13px; color:var(--text-soft); font-weight:400;"> / ${res.summary.total} คน</span></span>
+        </div>
+        <div style="font-size:14px; color:#334155; margin:8px 0; white-space:pre-wrap;">${escapeHtml(res.announcement.body)}</div>
+        ${res.announcement.link_url ? `<a href="${escapeHtml(res.announcement.link_url)}" target="_blank" rel="noopener" style="color:#0891b2; font-size:13px;">🔗 ${escapeHtml(res.announcement.link_url)}</a>` : ''}
+        <div class="progress-bar" style="margin-top:10px;"><div class="fill" style="width:${res.summary.percent}%"></div></div>
+        
+        <div class="gap-8 mt-12">
+          <button class="btn btn-sm" id="annAnnounce" style="background:#06c755;">💬 Copy ข้อความแจ้งกลุ่ม LINE</button>
+          <button class="btn btn-sm btn-secondary" id="annRefresh">🔄 รีเฟรช</button>
+          ${pending.length > 0 ? `<button class="btn btn-sm btn-secondary" id="annCopyPending">📋 Copy คนที่ยังไม่รับทราบ (${pending.length})</button>` : ''}
+          <button class="btn btn-sm btn-danger" id="annDelete">🗑️ ลบประกาศ</button>
+        </div>
+      </div>
+      
+      ${pending.length > 0 ? `
+        <div class="card">
+          <h3 style="margin-top:0;">ยังไม่รับทราบ (${pending.length})</h3>
+          <table>
+            <thead><tr><th>AS Code</th><th>ชื่อ</th><th>เบอร์</th></tr></thead>
+            <tbody>${pending.map(r => `<tr><td>${escapeHtml(r.as_code)}</td><td>${escapeHtml(r.as_name || '-')}</td><td style="font-size:13px; color:var(--text-soft);">${escapeHtml(r.as_phone || '-')}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      ` : ''}
+      
+      ${acked.length > 0 ? `
+        <div class="card">
+          <h3 style="margin-top:0;">รับทราบแล้ว (${acked.length})</h3>
+          <table>
+            <thead><tr><th>AS Code</th><th>ชื่อ</th><th>เวลารับทราบ</th></tr></thead>
+            <tbody>${acked.map(r => `<tr><td>${escapeHtml(r.as_code)}</td><td>${escapeHtml(r.as_name || '-')}</td><td style="font-size:13px; color:var(--text-soft);">${r.acked_at ? formatDate(r.acked_at) : '-'}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      ` : ''}
+    `;
+    
+    content.querySelector('#annRefresh').onclick = load;
+    content.querySelector('#annAnnounce').onclick = () => {
+      let msg = '📢 ประกาศ\n\n"' + res.announcement.title + '"\n' + res.announcement.body;
+      if (res.announcement.link_url) msg += '\n\n🔗 ' + res.announcement.link_url;
+      msg += '\n\nดูในแอป SS Survey แล้วกดรับทราบด้วยครับ\n' + appUrl();
+      copyText(msg, 'ข้อความแจ้งกลุ่ม — วางในกลุ่ม LINE ได้เลย');
+    };
+    const cp = content.querySelector('#annCopyPending');
+    if (cp) cp.onclick = () => copyText(pending.map(r => r.as_code).join(', '), 'รหัส AS ที่ยังไม่รับทราบ');
+    
+    content.querySelector('#annDelete').onclick = async () => {
+      if (!confirm('ลบประกาศนี้และการรับทราบทั้งหมด? กู้คืนไม่ได้')) return;
+      setState({loading: true});
+      try {
+        const r = await api('admin_delete_announcement', {token: state.token, announcement_id: state.data.announcement_id, confirm: 'DELETE'});
+        setState({loading: false});
+        if (r.ok) { setMsg('success', r.message); setState({screen: 'admin_announcements', data: {}}); }
+        else setMsg('error', r.error);
+      } catch (e) { setState({loading: false}); setMsg('error', e.message); }
+    };
+  };
+  
+  load();
 }
 
 async function renderAdminUsers(app) {
