@@ -375,6 +375,71 @@ function mockParseSelectedBranches(jsonStr) {
   }).filter(b => b && b.code);
 }
 
+function mockBuildTasks() {
+  const myBranches = mockDB.branches.filter(b => b.assigned_as_code === 'AS01' && b.status === 'active');
+  const myCodes = myBranches.map(b => b.branch_code);
+  const tasks = [];
+  mockDB.surveys.filter(s => s.status === 'published').forEach(s => {
+    const sel = mockParseSelectedBranches(s.selected_branches_json);
+    const selCodes = sel.map(x => x.code);
+    myCodes.forEach(bc => {
+      if (selCodes.indexOf(bc) === -1) return;
+      const branch = myBranches.find(b => b.branch_code === bc);
+      const submitted = mockDB.responses.some(r => r.survey_id === s.survey_id && r.branch_code === bc);
+      tasks.push({
+        survey_id: s.survey_id, survey_title: s.title, survey_description: s.description,
+        deadline: s.deadline, branch_code: bc, branch_name: branch.branch_name,
+        account: branch.account, status: submitted ? 'submitted' : 'pending'
+      });
+    });
+  });
+  tasks.sort((a,b) => a.status !== b.status ? (a.status === 'pending' ? -1 : 1) : 0);
+  const myLinkTasks = (mockDB.linkTasks || []).filter(t => {
+    if (t.status !== 'published') return false;
+    const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
+    return assigned.indexOf('AS01') !== -1;
+  }).map(t => {
+    const doneRow = (mockDB.linkTaskDone || []).find(d => d.task_id === t.task_id && d.as_code === 'AS01');
+    return {
+      task_id: t.task_id, title: t.title, description: t.description,
+      link_url: t.link_url, deadline: t.deadline || null,
+      done: !!doneRow, done_at: doneRow ? doneRow.done_at : null
+    };
+  });
+  myLinkTasks.sort((a,b) => a.done !== b.done ? (a.done ? 1 : -1) : 0);
+  return {tasks, link_tasks: myLinkTasks};
+}
+
+function mockBuildAnnouncements() {
+  const anns = (mockDB.announcements || []).filter(a => a.status === 'published').map(a => {
+    const ackRow = (mockDB.announcementAck || []).find(k => k.announcement_id === a.announcement_id && k.as_code === 'AS01');
+    return {
+      announcement_id: a.announcement_id, title: a.title, body: a.body,
+      link_url: a.link_url || '', pinned: String(a.pinned).toLowerCase() === 'true',
+      created_at: a.created_at, acked: !!ackRow, acked_at: ackRow ? ackRow.acked_at : null
+    };
+  });
+  anns.sort((a,b) => a.pinned !== b.pinned ? (a.pinned ? -1 : 1) : String(b.created_at).localeCompare(String(a.created_at)));
+  return {announcements: anns};
+}
+
+function mockBuildSurveyList() {
+  return mockDB.surveys.map(s => {
+    let qc = 0, bc = 0;
+    try { qc = JSON.parse(s.questions_json || '[]').length; } catch(e){}
+    try { bc = mockParseSelectedBranches(s.selected_branches_json).length; } catch(e){}
+    return {survey_id: s.survey_id, title: s.title, description: s.description, deadline: s.deadline, status: s.status, created_at: s.created_at, question_count: qc, branch_count: bc};
+  }).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+function mockBuildLinkTaskList() {
+  return (mockDB.linkTasks || []).map(t => {
+    const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
+    const doneCount = (mockDB.linkTaskDone || []).filter(d => d.task_id === t.task_id).length;
+    return {task_id: t.task_id, title: t.title, description: t.description, link_url: t.link_url, deadline: t.deadline, status: t.status, created_at: t.created_at, assigned_count: assigned.length, done_count: doneCount};
+  }).sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
 function mockApi(action, p) {
   const ok = (extra) => ({ok: true, ...extra});
   const fail = (error) => ({ok: false, error});
@@ -395,39 +460,13 @@ function mockApi(action, p) {
     }
     
     case 'get_tasks': {
-      const myBranches = mockDB.branches.filter(b => b.assigned_as_code === 'AS01' && b.status === 'active');
-      const myCodes = myBranches.map(b => b.branch_code);
-      const tasks = [];
-      mockDB.surveys.filter(s => s.status === 'published').forEach(s => {
-        const sel = mockParseSelectedBranches(s.selected_branches_json);
-        const selCodes = sel.map(x => x.code);
-        myCodes.forEach(bc => {
-          if (selCodes.indexOf(bc) === -1) return;
-          const branch = myBranches.find(b => b.branch_code === bc);
-          const submitted = mockDB.responses.some(r => r.survey_id === s.survey_id && r.branch_code === bc);
-          tasks.push({
-            survey_id: s.survey_id, survey_title: s.title, survey_description: s.description,
-            deadline: s.deadline, branch_code: bc, branch_name: branch.branch_name,
-            account: branch.account, status: submitted ? 'submitted' : 'pending'
-          });
-        });
-      });
-      tasks.sort((a,b) => a.status !== b.status ? (a.status === 'pending' ? -1 : 1) : 0);
-      // Link tasks for AS01
-      const myLinkTasks = (mockDB.linkTasks || []).filter(t => {
-        if (t.status !== 'published') return false;
-        const assigned = JSON.parse(t.assigned_as_codes_json || '[]');
-        return assigned.indexOf('AS01') !== -1;
-      }).map(t => {
-        const doneRow = (mockDB.linkTaskDone || []).find(d => d.task_id === t.task_id && d.as_code === 'AS01');
-        return {
-          task_id: t.task_id, title: t.title, description: t.description,
-          link_url: t.link_url, deadline: t.deadline || null,
-          done: !!doneRow, done_at: doneRow ? doneRow.done_at : null
-        };
-      });
-      myLinkTasks.sort((a,b) => a.done !== b.done ? (a.done ? 1 : -1) : 0);
-      return ok({tasks, link_tasks: myLinkTasks});
+      return ok(mockBuildTasks());
+    }
+    
+    case 'get_home': {
+      const t = mockBuildTasks();
+      const a = mockBuildAnnouncements();
+      return ok({tasks: t.tasks, link_tasks: t.link_tasks, announcements: a.announcements});
     }
     
     case 'link_task_mark_done': {
@@ -686,13 +725,11 @@ function mockApi(action, p) {
     }
     
     case 'admin_list_surveys': {
-      const surveys = mockDB.surveys.map(s => ({
-        survey_id: s.survey_id, title: s.title, description: s.description, deadline: s.deadline,
-        status: s.status, created_at: s.created_at,
-        question_count: JSON.parse(s.questions_json).length,
-        branch_count: mockParseSelectedBranches(s.selected_branches_json).length
-      })).sort((a,b) => b.created_at.localeCompare(a.created_at));
-      return ok({surveys});
+      return ok({surveys: mockBuildSurveyList()});
+    }
+    
+    case 'admin_dashboard': {
+      return ok({surveys: mockBuildSurveyList(), link_tasks: mockBuildLinkTaskList()});
     }
     
     case 'admin_get_progress': {
@@ -910,6 +947,13 @@ function renderAsLogin(app) { renderLoginForm(app, 'AS Login', 'as_login', 'AS C
 function renderAdminLogin(app) { renderLoginForm(app, 'Admin Login', 'admin_login', 'Admin Code', 'admin_login_action'); }
 
 function renderLoginForm(app, title, fromScreen, codeLabel, action) {
+  // Warm-up ping: wake the Apps Script instance while the user types their code+PIN.
+  // Fire-and-forget — we don't await it or care about the result. By the time they
+  // hit login, the instance is warm and the first real request skips cold start.
+  if (!demoMode) {
+    try { api('ping', {}).catch(() => {}); } catch (e) {}
+  }
+  
   const div = document.createElement('div');
   div.className = 'card';
   div.innerHTML = `
@@ -1040,14 +1084,10 @@ async function renderAsHome(app) {
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลดงาน...</div>';
   
-  // Fetch announcements too, just for the unread badge on the tab
-  let res, annRes;
-  try {
-    [res, annRes] = await Promise.all([
-      api('get_tasks', {token: state.token}),
-      api('get_announcements', {token: state.token})
-    ]);
-  }
+  // Single combined call — tasks + announcements in one request.
+  // Halves the Apps Script executions per AS load (relieves the concurrency queue).
+  let res;
+  try { res = await api('get_home', {token: state.token}); }
   catch (e) { div.innerHTML = `<div class="alert alert-error">โหลดไม่ได้: ${escapeHtml(e.message)}</div>`; return; }
   
   if (!res.ok) {
@@ -1062,7 +1102,7 @@ async function renderAsHome(app) {
   const linkDone = linkTasks.filter(t => t.done).length;
   const totalJobs = surveyGroups.length + linkTasks.length;
   const totalDone = completedCount + linkDone;
-  const unreadAnn = (annRes && annRes.ok) ? (annRes.announcements || []).filter(a => !a.acked).length : 0;
+  const unreadAnn = (res.announcements || []).filter(a => !a.acked).length;
   
   div.innerHTML = '';
   div.appendChild(asTabBar('as_home', unreadAnn));
@@ -1514,15 +1554,9 @@ async function renderAdminHome(app) {
   app.appendChild(div);
   div.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   
-  // Load surveys and link tasks together — this page is the single place
-  // to see every job that has been created, of both types.
-  let res, ltRes;
-  try {
-    [res, ltRes] = await Promise.all([
-      api('admin_list_surveys', {token: state.token}),
-      api('admin_list_link_tasks', {token: state.token})
-    ]);
-  }
+  // Single combined call — surveys + link tasks in one request.
+  let res;
+  try { res = await api('admin_dashboard', {token: state.token}); }
   catch (e) { div.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message)}</div>`; return; }
   
   if (!res.ok) {
@@ -1531,9 +1565,9 @@ async function renderAdminHome(app) {
     return;
   }
   
-  // Link tasks are optional — if the Sheet tabs aren't set up, still show surveys
-  const linkTasks = (ltRes && ltRes.ok) ? ltRes.link_tasks : [];
-  const ltError = (ltRes && !ltRes.ok) ? ltRes.error : null;
+  // Link tasks are optional — empty if the Sheet tabs aren't set up
+  const linkTasks = res.link_tasks || [];
+  const ltError = null;
   
   div.innerHTML = `
     <div class="card" style="border-left: 4px solid var(--primary);">
